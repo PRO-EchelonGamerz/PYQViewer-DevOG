@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" fill="none">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="50%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  <!-- Stylized geometric M / ribbon based on the provided logo -->
+  <path d="M10 50 L10 20 L30 5 L50 20 L50 35 L70 15 L90 35 L90 20 L110 5 L130 20 L130 50 L110 50 L110 30 L90 50 L70 30 L50 50 L30 30 L30 50 Z" fill="url(#g)" opacity="0.95"/>
+  <path d="M20 45 L20 25 L35 12 L45 25 L45 32 L65 18 L80 32 L80 25 L95 12 L110 25 L110 45 L100 45 L100 32 L80 48 L65 32 L45 48 L35 32 L35 45 Z" fill="url(#g)"/>
+</svg>

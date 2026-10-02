@@ -1,0 +1,12 @@
+{
+  "name": "pyqviewer",
+  "version": "2.0.0",
+  "description": "PYQViewer app",
+  "main": "index.html",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "google-auth-library": "^9.11.0",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3"
+  }
+}

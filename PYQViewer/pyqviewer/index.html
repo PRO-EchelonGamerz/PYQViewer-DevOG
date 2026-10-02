@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>PYQViewer</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon.png">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+:root{
+  --bg:#030408;
+  --panel:rgba(14, 17, 30, 0.5);
+  --panel-hover:rgba(20, 24, 42, 0.65);
+  --line:rgba(255, 255, 255, 0.1);
+  --line-strong:rgba(255, 255, 255, 0.16);
+  --line-glow:rgba(139, 92, 246, 0.55);
+  --text:#f8fafc;
+  --muted:#8994ab;
+  --purple:#8b5cf6;
+  --cyan:#22d3ee;
+  --pink:#ec4899;
+  --accent: #8b5cf6;
+  --accent-2: #22d3ee;
+  --shadow:0 30px 90px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,0.14), inset 0 0 0 1px rgba(255,255,255,0.05);
+  --blur:blur(40px) saturate(180%);
+  --ease:cubic-bezier(.22,1,.36,1);
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;font-family:var(--font)}
+html{scroll-behavior:smooth}
+body{min-height:100vh;color:var(--text);background:var(--bg);overflow-x:hidden;position:relative}
+button,input,select{font-family:inherit}
+
+/* ---- Vercel-style always-alive background: a faint drifting grid + two slow
+   orbiting aurora blobs, so the page never looks static even with zero input ---- */
+#dot-canvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:-2}
+.bg-grid{position:fixed;inset:-2px;z-index:-4;pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:42px 42px;mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,#000 30%,transparent 80%);
+  animation:gridDrift 26s linear infinite}
+@keyframes gridDrift{0%{background-position:0 0,0 0}100%{background-position:42px 84px,84px 42px}}
+.ambient-glass-orb-1{position:fixed;width:650px;height:650px;border-radius:50%;background:radial-gradient(circle,rgba(139,92,246,0.24) 0%,rgba(34,211,238,0.09) 50%,transparent 70%);top:-200px;left:-200px;z-index:-3;pointer-events:none;filter:blur(100px);animation:orbFloat1 22s ease-in-out infinite}
+.ambient-glass-orb-2{position:fixed;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(34,211,238,0.19) 0%,rgba(236,72,153,0.07) 50%,transparent 70%);bottom:-200px;right:-200px;z-index:-3;pointer-events:none;filter:blur(100px);animation:orbFloat2 26s ease-in-out infinite}
+@keyframes orbFloat1{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(60px,40px) scale(1.08)}66%{transform:translate(-30px,70px) scale(.96)}}
+@keyframes orbFloat2{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(-50px,-50px) scale(1.05)}66%{transform:translate(40px,-20px) scale(.94)}}
+@media (prefers-reduced-motion: reduce){.bg-grid,.ambient-glass-orb-1,.ambient-glass-orb-2{animation:none}}
+
+.liquid-glass{
+    background: var(--panel);
+    backdrop-filter: var(--blur);
+    -webkit-backdrop-filter: var(--blur);
+    border: 1px solid var(--line-strong);
+    box-shadow: var(--shadow);
+    transition: var(--ease);
+}
+
+.advanced-details{border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.02);overflow:hidden}
+.advanced-details summary{list-style:none;cursor:pointer;padding:.9rem 1.1rem;display:flex;align-items:center;justify-content:space-between;font-size:.85rem;font-weight:600;color:var(--muted);transition:color .2s ease}
+.advanced-details summary::-webkit-details-marker{display:none}
+.advanced-details summary:hover{color:var(--text)}
+.advanced-details .chev{transition:transform .25s var(--ease);opacity:.6}
+.advanced-details[open] .chev{transform:rotate(90deg)}
+.advanced-details .advanced-body{padding:0 1.1rem 1.2rem;animation:rise .3s var(--ease)}
+
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes pulseDot{0%,100%{transform:scale(1);opacity:.8}50%{transform:scale(1.35);opacity:1}}
+@keyframes popIn{0%{opacity:0;transform:translateY(14px) scale(.96)}60%{opacity:1;transform:translateY(-2px) scale(1.015)}100%{opacity:1;transform:none}}
+@keyframes toastIn{0%{opacity:0;transform:translateY(-10px) scale(.95)}60%{transform:translateY(2px) scale(1.02)}100%{opacity:1;transform:none}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+
+.top-bar{height:72px;padding:0 clamp(1rem,4vw,3rem);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;background:rgba(5,7,15,.72);backdrop-filter:var(--blur);border-bottom:1px solid var(--line-strong);flex-wrap:wrap;gap:.5rem .8rem;row-gap:.5rem}
+.nav-btn .short{display:none}
+.brand{font-size:1.1rem;font-weight:900;display:flex;align-items:center;gap:.65rem;cursor:pointer;color:#fff;letter-spacing:-.03em}
+.brand img.logo-img{height:28px;width:auto;display:block;border-radius:4px;object-fit:contain}
+.top-right-group{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;justify-content:flex-end}
+.nav-btn{border:1px solid var(--line-strong);color:var(--muted);background:rgba(255,255,255,.04);cursor:pointer;transition:transform .2s var(--ease),box-shadow .2s var(--ease),color .2s,border-color .2s,background .2s;padding:.58rem 1.05rem;border-radius:999px;font-size:.78rem;font-weight:750}
+.nav-btn:hover{color:#fff;border-color:var(--line-glow);background:linear-gradient(135deg,rgba(139,92,246,.28),rgba(34,211,238,.12));transform:translateY(-1px)}
+.nav-btn.primary{color:#fff;background:linear-gradient(135deg,var(--purple),#6d5dfc);border-color:transparent;box-shadow:0 10px 25px rgba(109,93,252,.35)}
+.active-user-badge{font-size:.72rem;color:#b8f7df;background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.35);padding:.42rem .7rem;border-radius:999px;white-space:nowrap}
+.role-pill{font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;margin-left:.4rem;opacity:.85}
+
+.layout{max-width:1480px;margin:auto;display:flex;gap:1.4rem;padding:2rem clamp(.8rem,4vw,2.5rem) 3rem}
+.sidebar{width:250px;flex-shrink:0;padding:1.1rem;border-radius:26px;height:fit-content;position:sticky;top:92px;animation:rise .5s var(--ease)}
+.sidebar-label{text-transform:uppercase;letter-spacing:.13em;color:#636e88;font-size:.64rem;font-weight:850;padding:.75rem .75rem .35rem}
+.sidebar-item{width:100%;text-align:left;padding:.8rem .95rem;border-radius:14px;background:transparent;font-size:.86rem;font-weight:650;margin:.18rem 0;display:flex;align-items:center;gap:.65rem;border:1px solid var(--line);color:var(--muted);cursor:pointer;transition:transform .2s var(--ease),color .2s,background .2s,border-color .2s}
+.sidebar-item:hover{transform:translateX(3px);color:#fff;background:rgba(255,255,255,.06);border-color:var(--line-strong)}
+.sidebar-item.active{color:#fff;background:linear-gradient(135deg,rgba(139,92,246,.35),rgba(34,211,238,.14));border-color:rgba(139,92,246,.55)}
+.sub-item{font-size:.78rem;padding-left:1.7rem;opacity:.85}
+.add-subject-row{padding:.6rem .3rem 0}
+.add-subject-row button{width:100%;font-size:.72rem;padding:.55rem;border-radius:12px;border:1px dashed var(--line-strong);background:transparent;color:var(--muted);cursor:pointer}
+.add-subject-row button:hover{color:#fff;border-color:var(--line-glow)}
+
+.content{flex:1;min-width:0}
+.app-section{display:none;border-radius:30px;padding:clamp(1.3rem,4vw,2.6rem);opacity:0;transform:translateY(8px);transition:opacity .28s var(--ease), transform .28s var(--ease)}
+.app-section.active{display:block;opacity:1;transform:none}
+.app-section.leaving{opacity:0;transform:translateY(-6px);pointer-events:none}
+.hero{padding-bottom:1.3rem}
+h1{font-size:clamp(2.1rem,5vw,3.4rem);line-height:1.03;letter-spacing:-.05em;font-weight:900;max-width:820px;background:linear-gradient(135deg,#fff 10%,#d9deea 60%,#8f98ab);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.subtitle{color:var(--muted);max-width:760px;line-height:1.7;font-size:.95rem;margin-top:.85rem}
+
+.search-container{position:relative;margin:1.6rem 0 1.4rem;max-width:500px}
+.search-input{width:100%;padding:.85rem 1rem .85rem 2.7rem;border-radius:14px;border:1px solid var(--line-strong);background:rgba(6,9,18,.75);color:#fff;font-size:.88rem;outline:none;transition:border-color .2s,box-shadow .2s}
+.search-input:focus{border-color:rgba(139,92,246,.9);box-shadow:0 0 0 4px rgba(139,92,246,.2)}
+.search-input::placeholder{color:#5b647c}
+.search-icon{position:absolute;left:.85rem;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+
+.menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;margin-top:1.8rem}
+.card{border:1px solid var(--line-strong);border-radius:22px;min-height:170px;padding:1.5rem;cursor:pointer;display:flex;flex-direction:column;justify-content:flex-end;position:relative;overflow:hidden;transition:transform .28s var(--ease),box-shadow .28s var(--ease),border-color .28s;background:linear-gradient(145deg,rgba(255,255,255,.07),rgba(255,255,255,.015))}
+.card:before{content:"";position:absolute;width:140px;height:140px;right:-50px;top:-50px;border-radius:50%;background:rgba(255,255,255,.09);filter:blur(22px)}
+.card:hover{transform:translateY(-5px);border-color:rgba(139,92,246,.75);box-shadow:0 18px 40px rgba(0,0,0,.5),0 0 30px rgba(139,92,246,.22)}
+.card h3{font-size:1.15rem;font-weight:850;margin-bottom:.4rem;color:#fff}
+.card p{color:var(--muted);font-size:.82rem;line-height:1.5}
+
+.section-header{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1.2rem;flex-wrap:wrap}
+.section-header h2{font-size:clamp(1.5rem,3vw,2.1rem);font-weight:900;letter-spacing:-.04em;color:#fff}
+.page-caption{color:var(--muted);font-size:.82rem;margin-top:.2rem}
+
+.subsubject-tabs{display:flex;gap:.45rem;flex-wrap:wrap;margin-bottom:1.1rem}
+.chip{padding:.45rem .85rem;border-radius:999px;border:1px solid var(--line-strong);background:rgba(255,255,255,.04);font-size:.75rem;font-weight:700;color:var(--muted);cursor:pointer;transition:.2s var(--ease);position:relative}
+.chip.active{color:#fff;background:linear-gradient(135deg,rgba(139,92,246,.4),rgba(34,211,238,.16));border-color:rgba(139,92,246,.6)}
+.chip:hover{color:#fff}
+.chip-del{position:absolute;right:.35rem;top:50%;transform:translateY(-50%);width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.85rem;line-height:1;color:#ffadb8;opacity:.7;transition:.15s}
+.chip-del:hover{opacity:1;background:rgba(251,113,133,.25)}
+
+.resource-list{list-style:none;display:flex;flex-direction:column;gap:.65rem}
+.resource-item{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.95rem 1.1rem;border:1px solid var(--line-strong);border-radius:16px;background:rgba(255,255,255,.035);transition:transform .2s var(--ease),border-color .2s,background .2s;animation:rise .3s var(--ease)}
+.resource-item:hover{transform:translateX(3px);border-color:rgba(139,92,246,.55);background:rgba(255,255,255,.07)}
+.resource-left{min-width:0}
+.resource-title{display:flex;align-items:center;gap:.6rem;font-weight:650;font-size:.92rem;color:#fff}
+.resource-sub{font-size:.72rem;color:var(--muted);margin-top:.15rem}
+.resource-title svg{color:var(--cyan);flex-shrink:0}
+.resource-right{display:flex;gap:.55rem;align-items:center;flex-shrink:0}
+.tag{font-size:.63rem;padding:.26rem .5rem;border:1px solid var(--line-strong);border-radius:8px;color:#c6ccda;font-weight:800;background:rgba(255,255,255,.04)}
+.open-btn,.delete-btn{border-radius:11px;padding:.42rem .72rem;font-size:.71rem;font-weight:750;cursor:pointer;transition:.2s var(--ease);text-decoration:none;border:1px solid}
+.open-btn{color:#d3c8ff;background:rgba(139,92,246,.2);border-color:rgba(139,92,246,.5)}
+.open-btn:hover{background:rgba(139,92,246,.35)}
+.delete-btn{color:#ffadb8;background:rgba(251,113,133,.12);border-color:rgba(251,113,133,.4)}
+.delete-btn:hover{background:rgba(251,113,133,.25)}
+
+.pool-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem;margin-bottom:1.6rem}
+.pool-card{border:1px solid var(--line-strong);border-radius:20px;padding:1.3rem;background:rgba(255,255,255,.035)}
+.pool-card h3{font-size:.98rem;color:#c5b7ff;margin-bottom:.6rem}
+.pool-stat{font-size:2rem;font-weight:900;letter-spacing:-.03em;color:#fff}
+.tab-row{display:flex;gap:.4rem;margin-bottom:1.2rem;flex-wrap:wrap}
+.tab-btn{padding:.55rem 1rem;border-radius:12px;border:1px solid var(--line-strong);background:rgba(255,255,255,.03);color:var(--muted);font-size:.8rem;font-weight:700;cursor:pointer}
+.tab-btn.active{color:#fff;background:linear-gradient(135deg,rgba(139,92,246,.35),rgba(34,211,238,.14));border-color:rgba(139,92,246,.55)}
+.data-table{width:100%;border-collapse:collapse;font-size:.82rem}
+.data-table th{text-align:left;color:#78829b;text-transform:uppercase;letter-spacing:.06em;font-size:.65rem;font-weight:850;padding:.6rem .7rem;border-bottom:1px solid var(--line-strong)}
+.data-table td{padding:.7rem .7rem;border-bottom:1px solid var(--line);color:#e6e9f2}
+.badge-role{font-size:.62rem;padding:.2rem .5rem;border-radius:7px;font-weight:800;text-transform:uppercase}
+.badge-head{background:rgba(236,72,153,.18);color:#ffb3d9}
+.badge-teacher{background:rgba(34,211,238,.15);color:#9fe9f7}
+.badge-new{background:rgba(251,191,36,.18);color:#ffd889}
+.table-wrap{overflow-x:auto;border-radius:16px;border:1px solid var(--line-strong)}
+.empty-note{color:var(--muted);font-size:.85rem;padding:1rem;text-align:center;border:1px dashed var(--line-strong);border-radius:14px}
+
+/* ---- Modals ---- */
+.modal-overlay{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(2,3,7,.75);backdrop-filter:blur(16px);opacity:0;pointer-events:none;transition:opacity .22s ease}
+.modal-overlay.active{opacity:1;pointer-events:auto}
+.modal{position:relative;width:min(460px,100%);max-height:88vh;overflow-y:auto;padding:1.7rem;border-radius:24px;border:1px solid var(--line-strong);background:linear-gradient(180deg,rgba(255,255,255,.1),rgba(255,255,255,.015)),#0a0e1a;box-shadow:0 40px 100px rgba(0,0,0,.85);animation:popIn .32s var(--ease)}
+.modal.wide{width:min(640px,100%)}
+.close-btn{position:absolute;right:1rem;top:1rem;width:34px;height:34px;border-radius:50%;border:1px solid var(--line-strong);background:rgba(255,255,255,.08);color:var(--muted);cursor:pointer;transition:.22s var(--ease)}
+.close-btn:hover{color:#fff;transform:rotate(90deg);border-color:var(--line-glow)}
+.modal h3{font-size:1.35rem;margin-bottom:1.2rem;color:#fff;padding-right:2rem}
+.field{margin-bottom:1rem}
+.field label{display:block;text-transform:uppercase;letter-spacing:.07em;color:#78829b;font-size:.67rem;font-weight:850;margin-bottom:.4rem}
+.input,select.input{width:100%;padding:.8rem .95rem;border-radius:12px;border:1px solid var(--line-strong);outline:none;background:rgba(4,6,12,.8);color:#fff;transition:.2s var(--ease)}
+.input:focus{border-color:rgba(139,92,246,.9);box-shadow:0 0 0 4px rgba(139,92,246,.2)}
+.input::placeholder{color:#5b6478}
+
+.file-dropzone{position:relative;border:2px dashed rgba(139,92,246,.55);border-radius:16px;padding:1.5rem 1rem;text-align:center;background:rgba(139,92,246,.06);cursor:pointer;transition:.22s var(--ease);display:block}
+.file-dropzone:hover,.file-dropzone.dragover{border-color:rgba(34,211,238,.8);background:rgba(34,211,238,.1)}
+.file-dropzone input[type="file"]{position:absolute;width:0.1px;height:0.1px;opacity:0;overflow:hidden;z-index:-1}
+.file-dropzone-content{display:flex;flex-direction:column;align-items:center;gap:.4rem;pointer-events:none}
+.file-dropzone-icon{width:38px;height:38px;border-radius:50%;background:rgba(139,92,246,.22);border:1px solid rgba(139,92,246,.45);display:flex;align-items:center;justify-content:center;color:var(--cyan)}
+.file-dropzone-text{font-size:.86rem;font-weight:750;color:#fff}
+.file-dropzone-sub{font-size:.72rem;color:var(--muted)}
+
+.submit-btn{width:100%;border:1px solid rgba(255,255,255,.25);border-radius:12px;padding:.85rem;background:linear-gradient(135deg,var(--purple),#6d5dfc);color:#fff;font-weight:850;cursor:pointer;transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
+.submit-btn:hover{transform:translateY(-2px);box-shadow:0 16px 32px rgba(109,93,252,.5)}
+.submit-btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+.secondary-btn{width:100%;border:1px solid var(--line-strong);border-radius:12px;padding:.78rem;background:rgba(255,255,255,.04);color:var(--muted);font-weight:750;cursor:pointer;margin-top:.55rem;transition:.2s}
+.secondary-btn:hover{color:#fff;border-color:var(--line-glow)}
+.danger-btn{width:100%;border:1px solid rgba(251,113,133,.5);border-radius:12px;padding:.78rem;background:rgba(251,113,133,.12);color:#ffadb8;font-weight:800;cursor:pointer;margin-top:.55rem}
+.danger-btn:hover{background:rgba(251,113,133,.25)}
+
+.error{display:none;color:#ffadb8;background:rgba(251,113,133,.12);border:1px solid rgba(251,113,133,.35);padding:.65rem .8rem;border-radius:11px;font-size:.8rem;margin:.7rem 0}
+.error.shown{display:block;animation:shake .4s var(--ease)}
+.success{display:none;color:#a7f3d0;background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.35);padding:.65rem .8rem;border-radius:11px;font-size:.8rem;margin:.7rem 0}
+.success.shown{display:block}
+.hint{font-size:.72rem;color:var(--muted);margin-top:.5rem;line-height:1.5}
+.divider{display:flex;align-items:center;gap:.7rem;margin:1.1rem 0;color:#5b647c;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em}
+.divider:before,.divider:after{content:"";flex:1;height:1px;background:var(--line-strong)}
+#google-btn-login,#google-btn-register{display:flex;justify-content:center;margin:.4rem 0}
+
+/* ---- Login popover: anchored right under the Login button in the top bar,
+   instead of dead-centering on the whole screen like the other modals ---- */
+#login-modal{align-items:flex-start;justify-content:flex-end;padding:calc(72px + .6rem) clamp(1rem,4vw,3rem) 0 0}
+#login-modal .modal{margin:0;width:min(360px,100%)}
+@media(max-width:520px){#login-modal{align-items:center;justify-content:center;padding:1rem}#login-modal .modal{width:100%}}
+
+/* ---- Custom toast/confirm system (replaces browser alert/confirm) ---- */
+.toast-stack{position:fixed;top:1.1rem;right:1.1rem;z-index:400;display:flex;flex-direction:column;gap:.6rem;max-width:340px}
+.toast{padding:.85rem 1rem;border-radius:14px;font-size:.83rem;font-weight:650;border:1px solid var(--line-strong);background:linear-gradient(145deg,rgba(20,25,44,.92),rgba(10,13,24,.95));backdrop-filter:blur(20px);box-shadow:0 20px 45px rgba(0,0,0,.5);animation:toastIn .35s var(--ease);color:#fff}
+.toast.error{border-color:rgba(251,113,133,.5);color:#ffb9c2}
+.toast.success{border-color:rgba(52,211,153,.5);color:#b8f7df}
+.confirm-modal .modal{width:min(400px,100%);text-align:center}
+.confirm-modal p{color:var(--muted);font-size:.87rem;margin:.7rem 0 1.3rem;line-height:1.55}
+.confirm-actions{display:flex;gap:.6rem}
+.confirm-actions button{flex:1}
+
+.about-section{display:block;max-width:1480px;margin:0 clamp(.8rem,4vw,2.5rem) 2.5rem;padding:1.8rem clamp(1.2rem,4vw,2.6rem);border-radius:26px;text-align:center}
+@media(min-width:1560px){.about-section{margin-left:auto;margin-right:auto}}
+.about-section h2{font-size:1.5rem;margin-bottom:.6rem;color:#fff}
+.about-section p{color:var(--muted);max-width:640px;margin:0 auto .9rem;line-height:1.7;font-size:.9rem}
+.credits{font-size:.83rem;color:#c6ccda;margin-top:.6rem}
+.credits b{color:#fff}
+/* Theme system */
+body.theme-glass{--bg:#0b1220;--panel:rgba(255,255,255,.08);--text:#f0f4ff;--muted:#9aa8c7;--purple:#60a5fa;--cyan:#22d3ee;--accent:#60a5fa;--accent-2:#a78bfa}
+body.theme-paper{--bg:#f4f0e6;--panel:rgba(255,255,255,.72);--text:#1c1917;--muted:#57534e;--purple:#b45309;--cyan:#0f766e;--accent:#b45309;--accent-2:#0f766e;--line:rgba(0,0,0,.08);--line-strong:rgba(0,0,0,.14)}
+body.theme-operator{--bg:#0a0a0b;--panel:rgba(20,12,16,.65);--text:#fafafa;--muted:#a1a1aa;--purple:#f43f5e;--cyan:#fb7185;--accent:#f43f5e;--accent-2:#e11d48}
+body.theme-aurora{--bg:#020617;--panel:rgba(15,23,42,.55);--text:#f1f5f9;--muted:#94a3b8;--purple:#a855f7;--cyan:#06b6d4;--accent:#a855f7;--accent-2:#06b6d4}
+body.theme-paper .liquid-glass,body.theme-paper .card,body.theme-paper .resource-item{color:var(--text)}
+body.theme-paper h1{-webkit-text-fill-color:var(--text);background:none;color:var(--text)}
+body.theme-paper .brand{color:var(--text)}
+.theme-picker{display:flex;gap:.4rem;flex-wrap:wrap}
+.theme-swatch{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:.2s}
+.theme-swatch.active{border-color:#fff;box-shadow:0 0 0 2px var(--accent)}
+
+/* ---- Customize modal (presets / custom theme / effects) ---- */
+.customize-modal-overlay{display:none;position:fixed;inset:0;z-index:200;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,.75);backdrop-filter:blur(6px)}
+.customize-modal-overlay.open{display:flex;animation:popIn .25s var(--ease)}
+.customize-modal{width:min(560px,100%);max-height:88vh;overflow-y:auto;border-radius:26px;padding:1.5rem}
+.cm-head{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:1rem;margin-bottom:1.1rem}
+.cm-icon{width:38px;height:38px;border-radius:14px;background:rgba(255,255,255,.08);border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;color:var(--cyan)}
+.cm-locked{padding:.9rem 1rem;border-radius:14px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:#ffd889;font-size:.78rem}
+.cm-tabs{display:flex;gap:.3rem;padding:.25rem;border-radius:14px;background:rgba(0,0,0,.35);border:1px solid var(--line);margin-bottom:1.1rem}
+.cm-tab{flex:1;padding:.5rem .6rem;border-radius:10px;border:0;background:transparent;color:var(--muted);font-size:.74rem;font-weight:750;cursor:pointer;transition:.2s var(--ease)}
+.cm-tab.active{background:linear-gradient(135deg,var(--purple),var(--cyan));color:#fff}
+.cm-pane{animation:rise .25s var(--ease)}
+.cm-label{display:block;font-size:.66rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:800;margin-bottom:.55rem}
+.cm-block{margin-bottom:1.2rem}
+.cm-preset-list{display:flex;flex-direction:column;gap:.55rem}
+.cm-preset-card{display:flex;align-items:center;justify-content:space-between;gap:.7rem;padding:.75rem .9rem;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.03);cursor:pointer;transition:.2s var(--ease)}
+.cm-preset-card:hover{background:rgba(255,255,255,.06);border-color:var(--line-strong)}
+.cm-preset-card.active{border-color:var(--cyan);background:rgba(34,211,238,.08);box-shadow:0 0 0 1px rgba(34,211,238,.3)}
+.cm-preset-orb{width:38px;height:38px;border-radius:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.cm-preset-orb i{width:14px;height:14px;border-radius:50%;background:rgba(255,255,255,.85);display:block}
+.cm-preset-name{font-size:.78rem;font-weight:750;color:#fff}
+.cm-preset-sub{font-size:.68rem;color:var(--muted)}
+.cm-swatch-row{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+.cm-color-swatch{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,.2);cursor:pointer;transition:.15s}
+.cm-color-swatch.active{border-color:#fff;transform:scale(1.12)}
+.cm-color-picker-btn{display:flex;align-items:center;gap:.4rem;padding:.4rem .65rem;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid var(--line-strong);font-size:.7rem;font-weight:700;cursor:pointer;position:relative;color:var(--text)}
+.cm-color-picker-btn input[type=color]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.cm-font-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.5rem}
+.cm-font-card,.cm-bg-card,.cm-effect-card{padding:.65rem .75rem;border-radius:13px;border:1px solid var(--line);background:rgba(255,255,255,.03);cursor:pointer;transition:.2s var(--ease)}
+.cm-font-card.active,.cm-bg-card.active,.cm-effect-card.active{border-color:var(--cyan);background:rgba(34,211,238,.08)}
+.cm-font-name{font-size:.74rem;font-weight:750;display:block;color:#fff}
+.cm-font-desc{font-size:.64rem;color:var(--muted);display:block;margin-top:.1rem}
+.cm-bg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.5rem}
+.cm-bg-swatch{width:100%;height:16px;border-radius:6px;border:1px solid var(--line-strong);margin-bottom:.4rem}
+.cm-effect-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.6rem;margin-bottom:1rem}
+.cm-effect-title{font-size:.76rem;font-weight:750;color:#fff;display:block}
+.cm-effect-desc{font-size:.66rem;color:var(--muted);display:block;margin-top:.25rem;line-height:1.4}
+.cm-toggle-row{display:flex;align-items:center;justify-content:space-between;padding:.8rem .9rem;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.03)}
+.cm-switch{width:42px;height:24px;border-radius:999px;border:0;background:#3f4657;position:relative;cursor:pointer;transition:.2s}
+.cm-switch.on{background:var(--cyan)}
+.cm-switch-knob{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s}
+.cm-switch.on .cm-switch-knob{left:21px}
+#customize-panel{position:fixed;bottom:1.2rem;right:1.2rem;z-index:100;width:min(320px,92vw);padding:1.1rem;border-radius:18px;display:none}
+#customize-panel.open{display:block;animation:popIn .3s var(--ease)}
+.customize-btn{position:fixed;bottom:1.2rem;right:1.2rem;z-index:99;padding:.55rem 1rem;border-radius:999px;border:1px solid var(--line-strong);background:rgba(10,12,22,.8);backdrop-filter:blur(12px);color:var(--muted);font-size:.75rem;font-weight:700;cursor:pointer}
+.customize-btn:hover{color:#fff}
+
+@media(max-width:1000px){.menu-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}.sidebar{width:210px}}
+@media(max-width:820px){.layout{flex-direction:column}.sidebar{width:100%;position:static;display:flex;overflow-x:auto;gap:.35rem;padding:.65rem;flex-wrap:nowrap}.sidebar-label,.sub-item{display:none}.sidebar-item{width:auto;white-space:nowrap;flex-shrink:0}.pool-grid{grid-template-columns:1fr 1fr}.resource-item{align-items:flex-start;flex-direction:column}.resource-right{width:100%;justify-content:flex-end}}
+@media(max-width:520px){.top-bar{height:auto;min-height:64px;padding:.6rem .8rem}.top-right-group{gap:.3rem;width:100%;justify-content:flex-start}.nav-btn{font-size:.68rem;padding:.5rem .65rem}.nav-btn .full{display:none}.nav-btn .short{display:inline}.brand{font-size:1.05rem}.layout{padding:.85rem .6rem 2rem}.app-section{border-radius:22px;padding:1.1rem}.modal{padding:1.3rem;border-radius:20px}h1{font-size:1.85rem}.pool-grid{grid-template-columns:1fr}.toast-stack{left:.6rem;right:.6rem;max-width:none}.section-header h2{font-size:1.4rem}.data-table{font-size:.72rem}.data-table th,.data-table td{padding:.5rem .45rem}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001ms!important;transition-duration:.001ms!important;scroll-behavior:auto!important}}
+
+.maintenance-screen{position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;text-align:center;padding:2rem;background:#0a0a0b;color:#e5e5e5;font-family:var(--font)}
+.crash-box{max-width:420px;width:100%}
+.broken-heart{font-size:3.2rem;line-height:1;margin-bottom:1.2rem;display:inline-block;animation:heartBeat 1.8s ease-in-out infinite;filter:drop-shadow(0 0 18px rgba(239,68,68,.45))}
+@keyframes heartBeat{0%,100%{transform:scale(1)}14%{transform:scale(1.12)}28%{transform:scale(1)}42%{transform:scale(1.08)}70%{transform:scale(1)}}
+.crash-title{color:#f87171;font-size:1.35rem;font-weight:800;margin-bottom:.6rem;letter-spacing:-.02em}
+.crash-message{color:#a1a1aa;font-size:.9rem;line-height:1.65;margin-bottom:1.4rem}
+.crash-footer{margin-top:1.4rem;color:#52525b;font-size:.72rem}
+.crash-cursor{display:inline-block;width:7px;height:14px;background:#e5e5e5;vertical-align:text-bottom;animation:crashBlink 1s step-end infinite;margin-left:2px}
+@keyframes crashBlink{50%{opacity:0}}
+</style>
+</head>
+<body>
+<canvas id="dot-canvas"></canvas>
+<div class="bg-grid"></div>
+<div class="ambient-glass-orb-1"></div>
+<div class="ambient-glass-orb-2"></div>
+<div class="toast-stack" id="toast-stack"></div>
+<div id="maintenance-overlay"></div>
+
+<header class="top-bar">
+  <div class="brand" onclick="navigate('home')"><img src="logo.png" alt="PYQViewer" class="logo-img" width="32" height="28">PYQViewer</div>
+  <div class="top-right-group">
+    <span id="user-badge" class="active-user-badge" style="display:none"></span>
+    <button class="nav-btn" id="pool-nav-btn" style="display:none" onclick="navigate('pool')">Teachers</button>
+    <button class="nav-btn primary" id="login-nav-btn" onclick="openLogin()">Login</button>
+    <button class="nav-btn" id="register-nav-btn" onclick="openRegister()"><span class="full">Register as Teacher</span><span class="short">Register</span></button>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="liquid-glass sidebar" id="sidebar">
+    <span class="sidebar-label">Directory</span>
+    <button class="sidebar-item active" data-nav="home" onclick="navigate('home')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+      Overview
+    </button>
+    <span class="sidebar-label">Subjects</span>
+    <div id="subject-nav-list"></div>
+    <div class="add-subject-row" id="add-subject-row" style="display:none">
+      <button onclick="openAddSubject()">+ Add subject</button>
+    </div>
+  </aside>
+
+  <main class="content">
+    <section id="home-sec" class="liquid-glass app-section active">
+      <div class="hero">
+        <h1>PYQViewer</h1>
+        <p class="subtitle">A shared library of practice worksheets and past-year papers, organized by subject. Teachers log in to upload, organize, and manage resources.</p>
+        <div class="search-container">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" id="global-search" class="search-input" placeholder="Search any worksheet or paper title..." oninput="handleSearch(this.value)">
+        </div>
+      </div>
+      <div class="menu-grid" id="home-subject-cards"></div>
+    </section>
+
+    <section id="subject-sec" class="liquid-glass app-section">
+      <div class="section-header">
+        <div><h2 id="subject-title"></h2><p class="page-caption" id="subject-caption"></p></div>
+        <button class="nav-btn" id="add-worksheet-btn" style="display:none" onclick="openUploadModalDirect()">+ Add worksheet</button>
+      </div>
+      <div class="subsubject-tabs" id="subsubject-tabs"></div>
+      <ul class="resource-list" id="subject-list"></ul>
+    </section>
+
+    <section id="pool-sec" class="liquid-glass app-section">
+      <div class="section-header"><div><h2>Teachers &amp; Account</h2><p class="page-caption" id="pool-caption">Your profile, colleagues, and (if you're the head teacher) full oversight.</p></div></div>
+
+      <div class="pool-grid">
+        <div class="liquid-glass pool-card"><h3>Signed in as</h3><div class="pool-stat" id="me-name" style="font-size:1.3rem"></div><div class="page-caption" id="me-role"></div></div>
+        <div class="liquid-glass pool-card"><h3>Total Worksheets</h3><div class="pool-stat" id="pool-total-docs">0</div></div>
+        <div class="liquid-glass pool-card"><h3>Your Uploads</h3><div class="pool-stat" id="pool-my-docs">0</div></div>
+      </div>
+
+      <div class="tab-row" id="pool-tabs">
+        <button class="tab-btn active" data-tab="colleagues" onclick="setPoolTab('colleagues')">Colleagues</button>
+        <button class="tab-btn" data-tab="account" onclick="setPoolTab('account')">Account</button>
+        <button class="tab-btn" data-tab="admin" id="pool-admin-btn" style="display:none" onclick="setPoolTab('admin')">Head Oversight</button>
+      </div>
+
+      <div id="pool-tab-colleagues">
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Name</th><th>Role</th></tr></thead><tbody id="colleagues-body"></tbody></table></div>
+      </div>
+
+      <div id="pool-tab-account" style="display:none">
+        <div class="liquid-glass pool-card" style="max-width:420px">
+          <h3>Session</h3>
+          <p class="page-caption" style="margin-bottom:1rem">You're signed in with Google. There's no separate password to manage — your Google account is your login.</p>
+          <button class="danger-btn" onclick="logout()">Sign Out</button>
+        </div>
+      </div>
+
+      <div id="pool-tab-admin" style="display:none">
+        <h3 style="margin:1.2rem 0 .6rem;font-size:1rem;color:#fff">Pending teacher approvals</h3>
+        <div id="pending-teachers-list"></div>
+        <h3 style="margin:1.6rem 0 .6rem;font-size:1rem;color:#fff">Pending subject approvals</h3>
+        <div id="pending-subjects-list"></div>
+
+        <details class="advanced-details" style="margin-top:1.8rem">
+          <summary>More management &amp; directory <span class="chev">&rsaquo;</span></summary>
+          <div class="advanced-body">
+            <h3 style="margin:1rem 0 .6rem;font-size:1rem;color:#fff">Authenticated subjects</h3>
+            <div id="approved-subjects-list"></div>
+            <h3 style="margin:1.6rem 0 .6rem;font-size:1rem;color:#fff">Full teacher directory</h3>
+            <div class="table-wrap"><table class="data-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Uploads</th></tr></thead><tbody id="all-teachers-body"></tbody></table></div>
+          </div>
+        </details>
+        
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer class="liquid-glass about-section">
+  <h2>About PYQViewer</h2>
+  <p>PYQViewer exists to give students free, organized access to practice worksheets and past-year question papers, and to give teachers a simple shared space to publish and manage them.</p>
+  <p class="credits">Made by <b>Arsh Verma</b> and <b>Sachet Anantwar</b>, with the help of <b>Bina Bhutani</b>.</p>
+</footer>
+
+<!-- ================= MODALS ================= -->
+
+<div class="modal-overlay" id="login-modal">
+  <div class="liquid-glass modal">
+    <button class="close-btn" onclick="closeModals()">&times;</button>
+    <h3>Teacher Login</h3>
+    <p class="hint" style="margin-bottom:1rem">Sign in with the Gmail account you registered with.</p>
+    <div id="google-btn-login"></div>
+    <div class="error" id="login-error"></div>
+    <div class="divider">new here?</div>
+    <button class="secondary-btn" onclick="openRegister()">Register as a Teacher</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="register-modal">
+  <div class="liquid-glass modal">
+    <button class="close-btn" onclick="closeModals()">&times;</button>
+    <h3>Register as a Teacher</h3>
+    <p class="hint" style="margin-bottom:1rem">Use your Gmail account to register. A head teacher will need to approve your account before you can upload.</p>
+    <div id="google-btn-register"></div>
+    <div class="error" id="register-error"></div>
+    <div class="success" id="register-success"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="upload-modal">
+  <div class="liquid-glass modal">
+    <button class="close-btn" onclick="closeModals()">&times;</button>
+    <h3>Add Worksheet</h3>
+    <div class="field">
+      <label>Subject</label>
+      <select id="up-subject" class="input" onchange="populateSubSubjectSelect()"></select>
+    </div>
+    <div class="field">
+      <label>Sub-subject (optional)</label>
+      <select id="up-subsubject" class="input"><option value="">— None —</option></select>
+    </div>
+    <div class="field">
+      <label>Title</label>
+      <input class="input" id="up-title" placeholder="e.g. Chapter 4 Practice Set">
+    </div>
+    <div class="field">
+      <label>PDF File</label>
+      <label class="file-dropzone" id="file-dropzone-label" for="up-file">
+        <input type="file" id="up-file" accept="application/pdf,application/x-pdf" onchange="updateFileName(this)">
+        <div class="file-dropzone-content">
+          <div class="file-dropzone-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          </div>
+          <div class="file-dropzone-text" id="file-chosen-label">Click to browse or drop PDF here</div>
+          <div class="file-dropzone-sub">PDF only, up to 25MB</div>
+        </div>
+      </label>
+    </div>
+    <button class="submit-btn" id="upload-commit-btn" onclick="uploadFile()">Upload PDF</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="add-subject-modal">
+  <div class="liquid-glass modal">
+    <button class="close-btn" onclick="closeModals()">&times;</button>
+    <h3>Propose a Subject</h3>
+    <p class="hint" style="margin-bottom:1rem">Another teacher will need to authenticate it before it appears for everyone.</p>
+    <div class="field"><label>Subject name</label><input class="input" id="new-subject-name" placeholder="e.g. History"></div>
+    <button class="submit-btn" onclick="submitNewSubject()">Submit for authentication</button>
+    <div class="divider">or</div>
+    <p class="hint" style="margin-bottom:.6rem">Add a sub-subject under an existing subject (no approval needed — it's yours to create).</p>
+    <div class="field"><label>Parent subject</label><select id="new-subsubject-parent" class="input"></select></div>
+    <div class="field"><label>Sub-subject name</label><input class="input" id="new-subsubject-name" placeholder="e.g. Algebra"></div>
+    <button class="secondary-btn" onclick="submitNewSubSubject()">Add sub-subject</button>
+  </div>
+</div>
+
+<div class="confirm-modal modal-overlay" id="confirm-modal">
+  <div class="liquid-glass modal">
+    <h3 id="confirm-title">Are you sure?</h3>
+    <p id="confirm-body"></p>
+    <div class="confirm-actions">
+      <button class="secondary-btn" onclick="closeModals()">Cancel</button>
+      <button class="danger-btn" id="confirm-yes-btn">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<button class="customize-btn" id="customize-btn" onclick="toggleCustomize()" style="display:none">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:.35rem"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="19" cy="12" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="10" cy="19" r="2.5"/><path d="M12 12a8 8 0 1 1 0-16"/></svg>Customize
+</button>
+<div class="customize-modal-overlay" id="customize-panel" onclick="if(event.target===this) toggleCustomize()">
+  <div class="liquid-glass customize-modal">
+    <div class="cm-head">
+      <div style="display:flex;align-items:center;gap:.7rem">
+        <div class="cm-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="19" cy="12" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="10" cy="19" r="2.5"/><path d="M12 12a8 8 0 1 1 0-16"/></svg>
+        </div>
+        <div>
+          <strong style="font-size:.95rem;display:block">Theme &amp; Appearance</strong>
+          <span class="muted" style="font-size:.72rem">Liquid glass styling, colors, fonts &amp; background</span>
+        </div>
+      </div>
+      <button class="close-btn" style="position:static;width:30px;height:30px" onclick="toggleCustomize()">&times;</button>
+    </div>
+
+    <div id="customize-locked" class="cm-locked" style="display:none">Interface customization has been locked by administrators.</div>
+
+    <div id="customize-body">
+      <div class="cm-tabs">
+        <button class="cm-tab active" data-ct="presets" onclick="setCustomizeTab('presets')">Presets</button>
+        <button class="cm-tab" data-ct="custom" onclick="setCustomizeTab('custom')">Custom Theme</button>
+        <button class="cm-tab" data-ct="effects" onclick="setCustomizeTab('effects')">Background</button>
+      </div>
+
+      <div class="cm-pane" id="cm-pane-presets">
+        <span class="cm-label">Curated Liquid Glass Themes</span>
+        <div class="cm-preset-list" id="theme-picker"></div>
+      </div>
+
+      <div class="cm-pane" id="cm-pane-custom" style="display:none">
+        <div class="cm-block">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span class="cm-label">Choose Accent Color</span>
+            <span class="mono" id="custom-color-label" style="font-size:.7rem">#8B5CF6</span>
+          </div>
+          <div class="cm-swatch-row" id="quick-colors"></div>
+        </div>
+        <div class="cm-block">
+          <span class="cm-label">Choose Font</span>
+          <div class="cm-font-grid" id="font-grid"></div>
+        </div>
+        <div class="cm-block">
+          <span class="cm-label">Background Atmosphere</span>
+          <div class="cm-bg-grid" id="bg-grid"></div>
+        </div>
+      </div>
+
+      <div class="cm-pane" id="cm-pane-effects" style="display:none">
+        <span class="cm-label">Interactive Canvas Effects</span>
+        <div class="cm-effect-grid" id="effect-grid"></div>
+        <div class="cm-toggle-row">
+          <div>
+            <strong style="font-size:.78rem;display:block">Mouse Proximity Physics</strong>
+            <span class="muted" style="font-size:.7rem">Enable cursor repulsion &amp; interaction</span>
+          </div>
+          <button class="cm-switch" id="interactive-toggle" onclick="toggleInteractiveBg()"><span class="cm-switch-knob"></span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   Background dot canvas (lighter + capped DPR for smooth mobile)
+   ============================================================ */
+const canvas = document.getElementById('dot-canvas');
+const ctx = canvas.getContext('2d');
+let dots = [];
+const mouse = { x: -9999, y: -9999, radius: 110 };
+function resizeCanvas(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const spacing = window.innerWidth < 640 ? 46 : 34;
+  dots = [];
+  for(let x=0;x<window.innerWidth;x+=spacing) for(let y=0;y<window.innerHeight;y+=spacing) dots.push({x,y});
+}
+window.addEventListener('resize', resizeCanvas);
+window.addEventListener('mousemove', e=>{mouse.x=e.clientX;mouse.y=e.clientY});
+window.addEventListener('mouseleave', ()=>{mouse.x=-9999;mouse.y=-9999});
+resizeCanvas();
+function drawParticles(time){
+  for(const d of dots){
+    const wave = Math.sin(time*0.5 + (d.x+d.y)*0.012);
+    let dx=mouse.x-d.x, dy=mouse.y-d.y, dist=Math.sqrt(dx*dx+dy*dy);
+    let dotX=d.x, dotY=d.y, alpha=.09+wave*.05, size=1.1+wave*.35;
+    const active = customizeState.interactive;
+    if(active && dist<mouse.radius){
+      const angle=Math.atan2(dy,dx), force=(mouse.radius-dist)/mouse.radius;
+      dotX-=Math.cos(angle)*force*10; dotY-=Math.sin(angle)*force*10; alpha=.28; size=1.5;
+    }
+    ctx.fillStyle=`rgba(255,255,255,${Math.max(.03,alpha)})`;
+    ctx.beginPath(); ctx.arc(dotX,dotY,Math.max(.6,size),0,Math.PI*2); ctx.fill();
+  }
+}
+function drawWaves(time){
+  const w = window.innerWidth, h = window.innerHeight;
+  const active = customizeState.interactive;
+  const bands = 5;
+  for(let b=0;b<bands;b++){
+    const baseY = h*(b+1)/(bands+1);
+    ctx.beginPath();
+    for(let x=0;x<=w;x+=12){
+      let y = baseY + Math.sin(x*0.008 + time*0.6 + b) * 22;
+      if(active){
+        const dx = x-mouse.x, dy=baseY-mouse.y, dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<220) y += Math.sin(dist*0.05 - time*2) * (1-dist/220) * 30;
+      }
+      x===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle = `rgba(139,92,246,${0.10+b*0.02})`;
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+  }
+}
+function drawGrid(time){
+  const w = window.innerWidth, h = window.innerHeight, spacing = 46;
+  const active = customizeState.interactive;
+  for(let x=0;x<w;x+=spacing){
+    for(let y=0;y<h;y+=spacing){
+      let alpha = .05 + Math.sin(time*0.4 + (x+y)*0.01)*.02;
+      if(active){
+        const dx=mouse.x-x, dy=mouse.y-y, dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<160) alpha += (1-dist/160)*.35;
+      }
+      ctx.strokeStyle = `rgba(34,211,238,${Math.max(.02,alpha)})`;
+      ctx.strokeRect(x,y,spacing-2,spacing-2);
+    }
+  }
+}
+function drawAuroraEffect(time){
+  const w = window.innerWidth, h = window.innerHeight;
+  const active = customizeState.interactive;
+  const cx = active && mouse.x>-9000 ? mouse.x : w/2 + Math.sin(time*0.2)*w*0.25;
+  const cy = active && mouse.y>-9000 ? mouse.y : h*0.35 + Math.cos(time*0.15)*h*0.1;
+  const grad = ctx.createRadialGradient(cx,cy,0,cx,cy,Math.max(w,h)*0.5);
+  grad.addColorStop(0,'rgba(139,92,246,.16)');
+  grad.addColorStop(.5,'rgba(34,211,238,.08)');
+  grad.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,w,h);
+}
+function drawDots(t){
+  ctx.clearRect(0,0,window.innerWidth,window.innerHeight);
+  const time = (t||0)/1000;
+  const effect = (typeof customizeState !== 'undefined' && customizeState.effect) || 'particles';
+  if(effect==='waves') drawWaves(time);
+  else if(effect==='grid') drawGrid(time);
+  else if(effect==='aurora') drawAuroraEffect(time);
+  else drawParticles(time);
+  requestAnimationFrame(drawDots);
+}
+requestAnimationFrame(drawDots);
+
+/* ============================================================
+   Config
+   ============================================================ */
+const GOOGLE_CLIENT_ID = '697451303043-juj3qtdp2c78093csibk82v0lkb5rhmj.apps.googleusercontent.com';
+const SUPABASE_URL = 'https://utnxyrgljfaybrnjqiqf.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_GpoEXB6p9EUOXcVwsQaVNQ_Bz_-mMBW';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let me = null; // {id,name,email,role}
+let subjectsCache = [];
+let currentSubjectId = null;
+let currentSubSubjectId = null;
+let currentSearchQuery = '';
+let poolTab = 'colleagues';
+
+/* ============================================================
+   Custom toast / confirm (replace browser alert/confirm)
+   ============================================================ */
+function toast(msg, type=''){
+  const stack = document.getElementById('toast-stack');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' '+type : '');
+  el.textContent = msg;
+  stack.appendChild(el);
+  const lifespan = type === 'error' ? 7000 : 3200;
+  setTimeout(()=>{ el.style.transition='opacity .3s ease, transform .3s ease'; el.style.opacity='0'; el.style.transform='translateY(-8px)'; setTimeout(()=>el.remove(),300); }, lifespan);
+}
+function confirmAction(title, body, onConfirm){
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-body').textContent = body;
+  const btn = document.getElementById('confirm-yes-btn');
+  const clone = btn.cloneNode(true);
+  btn.parentNode.replaceChild(clone, btn);
+  clone.addEventListener('click', ()=>{ closeModals(); onConfirm(); });
+  closeModals();
+  document.getElementById('confirm-modal').classList.add('active');
+}
+function closeModals(){ document.querySelectorAll('.modal-overlay').forEach(m=>m.classList.remove('active')); }
+
+/* ============================================================
+   API helper
+   ============================================================ */
+async function api(path, body){
+  const res = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify(body||{}) });
+  return res.json();
+}
+
+/* ============================================================
+   Session / auth
+   ============================================================ */
+async function refreshSession(){
+  const r = await api('/api/session', {});
+  if(r.loggedIn){ me = r.teacher; } else { me = null; }
+  updateSessionUI();
+}
+function logout(){
+  api('/api/session', {action:'logout'}).finally(()=>{ me=null; updateSessionUI(); navigate('home'); toast('Signed out.'); });
+}
+function updateSessionUI(){
+  const badge=document.getElementById('user-badge'), pool=document.getElementById('pool-nav-btn');
+  const loginBtn=document.getElementById('login-nav-btn'), registerBtn=document.getElementById('register-nav-btn');
+  const addSubjectRow=document.getElementById('add-subject-row');
+  if(me){
+    badge.style.display='inline-flex';
+    badge.innerHTML = me.name + '<span class="role-pill">'+(me.role==='head'?'HEAD':'TEACHER')+'</span>';
+    pool.style.display='inline-flex';
+    loginBtn.style.display='none'; registerBtn.style.display='none';
+    addSubjectRow.style.display='block';
+    document.getElementById('pool-admin-btn').style.display = me.role==='head' ? 'inline-block' : 'none';
+  } else {
+    badge.style.display='none'; pool.style.display='none';
+    loginBtn.style.display='inline-flex'; registerBtn.style.display='inline-flex';
+    addSubjectRow.style.display='none';
+  }
+  renderResources();
+}
+
+const MAPTILER_API_KEY = 'YOUR_MAPTILER_API_KEY_HERE';
+
+async function reverseGeocodeGps(latitude, longitude){
+  if(!MAPTILER_API_KEY || MAPTILER_API_KEY === 'YOUR_MAPTILER_API_KEY_HERE') return null;
+  try{
+    const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(longitude)},${encodeURIComponent(latitude)}.json?language=en&limit=1&key=${encodeURIComponent(MAPTILER_API_KEY)}`;
+    const r = await fetch(url, {headers:{Accept:'application/json'}});
+    if(!r.ok) return null;
+    const data = await r.json();
+    const f = data && data.features && data.features[0];
+    if(!f) return null;
+    const ctx = Array.isArray(f.context) ? f.context : [];
+    const get = (...types)=>{
+      for(const type of types){
+        const hit = ctx.find(x=>typeof x.id==='string' && x.id.startsWith(type+'.'));
+        if(hit) return hit.text || hit.name || '';
+      }
+      return '';
+    };
+    const props = f.properties || {};
+    return {
+      city: get('place','municipality','locality') || (f.place_type||[]).includes('place') ? (f.text || '') : '',
+      region: get('region'),
+      country: get('country') || props.country || ''
+    };
+  }catch(e){
+    console.warn('GPS reverse geocoding failed:', e);
+    return null;
+  }
+}
+
+async function getLoginDeviceLocation(kind){
+  // Ask explicitly at sign-in time. The browser controls the permission prompt.
+  // If the teacher declines or the device cannot provide a position, login still
+  // works and the server can fall back to its approximate IP-based location.
+  if(!('geolocation' in navigator)) return null;
+  const boxId = kind==='login' ? 'login-error' : 'register-success';
+  const box = document.getElementById(boxId);
+  if(box){
+    box.textContent = 'Location permission is requested to record your sign-in location. Please choose Allow if you agree.';
+    box.className = kind==='login' ? 'error shown' : 'success shown';
+  }
+  return new Promise(resolve=>{
+    navigator.geolocation.getCurrentPosition(
+      async pos=>{
+        const latitude = Number(pos.coords.latitude);
+        const longitude = Number(pos.coords.longitude);
+        const place = await reverseGeocodeGps(latitude, longitude);
+        resolve({
+          latitude,
+          longitude,
+          accuracy: Number.isFinite(pos.coords.accuracy) ? Number(pos.coords.accuracy) : null,
+          source: 'browser-gps',
+          city: place?.city || '',
+          region: place?.region || '',
+          country: place?.country || ''
+        });
+      },
+      ()=>resolve(null),
+      {enableHighAccuracy:true, maximumAge:0, timeout:15000}
+    );
+  });
+}
+function handleGoogleCredential(kind){
+  return async (response)=>{
+    const deviceLocation = await getLoginDeviceLocation(kind);
+    const r = await api('/api/auth-google', {credential: response.credential, deviceLocation});
+    if(r.success){
+      me = r.teacher; closeModals(); updateSessionUI();
+      toast('Welcome, '+me.name+'.', 'success');
+      navigate('home');
+    } else if(r.pending){
+      const box = document.getElementById(kind==='login'?'login-error':'register-success');
+      box.textContent = r.error; box.className = kind==='login' ? 'error shown' : 'success shown';
+    } else {
+      const box = document.getElementById(kind==='login'?'login-error':'register-error');
+      box.textContent = r.error || 'Something went wrong.'; box.className='error shown';
+    }
+  };
+}
+function initGoogleButtons(){
+  if(!window.google || !google.accounts) { setTimeout(initGoogleButtons, 300); return; }
+  google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleGoogleCredential('login') });
+  google.accounts.id.renderButton(document.getElementById('google-btn-login'), { theme:'filled_black', size:'large', shape:'pill', text:'signin_with' });
+  const g2 = google.accounts.id;
+  // Separate render target for the register modal (same client, different callback container context)
+  document.getElementById('register-modal').addEventListener('shown', ()=>{});
+}
+function openLogin(){ closeModals(); document.getElementById('login-error').className='error'; document.getElementById('login-modal').classList.add('active'); renderGoogleInto('google-btn-login','login'); }
+function openRegister(){ closeModals(); document.getElementById('register-error').className='error'; document.getElementById('register-success').className='success'; document.getElementById('register-modal').classList.add('active'); renderGoogleInto('google-btn-register','register'); }
+function renderGoogleInto(elId, kind){
+  if(!window.google || !google.accounts){ setTimeout(()=>renderGoogleInto(elId,kind), 300); return; }
+  const el = document.getElementById(elId); el.innerHTML='';
+  google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleGoogleCredential(kind) });
+  google.accounts.id.renderButton(el, { theme:'filled_black', size:'large', shape:'pill', text: kind==='login'?'signin_with':'signup_with' });
+}
+
+/* ============================================================
+   Subjects / navigation
+   ============================================================ */
+async function loadSubjects(){
+  const r = await api('/api/subjects', {action:'list'});
+  subjectsCache = r.subjects || [];
+  renderSidebar();
+  renderHomeCards();
+}
+function renderSidebar(){
+  const nav = document.getElementById('subject-nav-list');
+  nav.innerHTML = subjectsCache.map(s=>`
+    <button class="sidebar-item" data-nav="${s.id}" onclick="navigate('${s.id}')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
+      ${escapeHtml(s.name)}
+    </button>
+  `).join('');
+}
+function renderHomeCards(){
+  const grid = document.getElementById('home-subject-cards');
+  if(subjectsCache.length===0){ grid.innerHTML = '<div class="empty-note">No subjects yet. Sign in as a teacher to add the first one.</div>'; return; }
+  grid.innerHTML = subjectsCache.map(s=>`<div class="card" onclick="navigate('${s.id}')"><h3>${escapeHtml(s.name)}</h3><p>${s.sub_subjects.length} sub-subject${s.sub_subjects.length===1?'':'s'}</p></div>`).join('');
+}
+function navigate(id){
+  const sections = document.querySelectorAll('.app-section');
+  const current = document.querySelector('.app-section.active');
+  // Clear previous content immediately to avoid stale display during transition
+  if(current && current.id === 'subject-sec' && id !== currentSubjectId){
+    document.getElementById('subject-list').innerHTML = '';
+    document.getElementById('subsubject-tabs').innerHTML = '';
+    document.getElementById('subject-title').textContent = '';
+  }
+  sections.forEach(s=>{ s.classList.remove('active'); s.classList.remove('leaving'); });
+  document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.toggle('active', i.dataset.nav===id || (id!=='home'&&id!=='pool'&&i.dataset.nav===id)));
+  // Short leave animation then show new
+  requestAnimationFrame(()=>{
+    if(id==='home'){ document.getElementById('home-sec').classList.add('active'); }
+    else if(id==='pool'){ document.getElementById('pool-sec').classList.add('active'); loadPoolData(); }
+    else {
+      currentSubjectId = id; currentSubSubjectId = null;
+      const sec = document.getElementById('subject-sec');
+      sec.classList.add('active');
+      const subj = subjectsCache.find(s=>s.id===id);
+      document.getElementById('subject-title').textContent = subj ? subj.name : '';
+      document.getElementById('subject-caption').textContent = 'Worksheets and papers for '+(subj?subj.name:'');
+      document.getElementById('add-worksheet-btn').style.display = me ? 'inline-flex' : 'none';
+      renderSubSubjectTabs(subj);
+      renderResources();
+    }
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+}
+function renderSubSubjectTabs(subj){
+  const wrap = document.getElementById('subsubject-tabs');
+  if(!subj || subj.sub_subjects.length===0){ wrap.innerHTML=''; return; }
+  const canDelete = me && (me.role === 'head');
+  wrap.innerHTML = `<div class="chip active" data-ss="" onclick="selectSubSubject('')">All</div>` +
+    subj.sub_subjects.map(ss=>`<div class="chip" data-ss="${ss.id}" onclick="selectSubSubject('${ss.id}')" style="position:relative;padding-right:${canDelete?'1.8rem':'.85rem'}">${escapeHtml(ss.name)}${canDelete?`<span class="chip-del" onclick="event.stopPropagation();deleteSubSubject('${ss.id}','${escapeHtml(ss.name)}')" title="Delete sub-subject">&times;</span>`:''}</div>`).join('');
+}
+function deleteSubSubject(id, name){
+  confirmAction('Delete sub-subject?', `Remove "${name}"? Worksheets under it will move to the parent subject.`, async ()=>{
+    const r = await api('/api/subjects', {action:'delete_subsubject', id});
+    if(r.success){ toast('Sub-subject deleted.', 'success'); await loadSubjects(); const subj = subjectsCache.find(s=>s.id===currentSubjectId); renderSubSubjectTabs(subj); renderResources(); }
+    else toast(r.error||'Failed', 'error');
+  });
+}
+function selectSubSubject(id){
+  currentSubSubjectId = id || null;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active', c.dataset.ss===id));
+  renderResources();
+}
+
+/* ============================================================
+   Worksheets
+   ============================================================ */
+async function getSavedResources(){
+  const r = await api('/api/worksheets', {action:'get_all'});
+  return r.worksheets || [];
+}
+async function renderResources(){
+  if(!currentSubjectId){ return; }
+  const all = await getSavedResources();
+  let items = all.filter(w=>w.subject_id===currentSubjectId);
+  if(currentSubSubjectId) items = items.filter(w=>w.sub_subject_id===currentSubSubjectId);
+  const q = currentSearchQuery.toLowerCase().trim();
+  if(q) items = items.filter(w=>w.title.toLowerCase().includes(q));
+  const list = document.getElementById('subject-list');
+  if(items.length===0){ list.innerHTML = '<li class="resource-item" style="justify-content:center;color:var(--muted);border-style:dashed">No worksheets here yet.</li>'; return; }
+  list.innerHTML = items.map(item=>{
+    const canDelete = me && (me.role==='head' || item.teacher_id===me.id);
+    return `<li class="resource-item"><div class="resource-left"><div class="resource-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>${escapeHtml(item.title)}
+      </div><div class="resource-sub">Uploaded by ${escapeHtml(item.teacher_name||'—')}</div></div>
+      <div class="resource-right"><span class="tag">PDF</span>
+      <a class="open-btn" href="viewer.html?url=${encodeURIComponent(item.file_url)}&title=${encodeURIComponent(item.title)}" rel="noopener">Open</a>
+      ${canDelete?`<button class="delete-btn" onclick="deleteResource('${item.id}')">Delete</button>`:''}</div></li>`;
+  }).join('');
+}
+function handleSearch(val){ currentSearchQuery = val; if(!currentSubjectId && subjectsCache.length){ navigate(subjectsCache[0].id); } else { renderResources(); } }
+
+function openUploadModalDirect(){
+  if(!me){ openLogin(); return; }
+  document.getElementById('up-title').value=''; document.getElementById('up-file').value='';
+  document.getElementById('file-chosen-label').textContent='Click to browse or drop PDF here';
+  const sel = document.getElementById('up-subject');
+  sel.innerHTML = subjectsCache.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  if(currentSubjectId) sel.value = currentSubjectId;
+  populateSubSubjectSelect();
+  document.getElementById('upload-modal').classList.add('active');
+}
+function populateSubSubjectSelect(){
+  const subjId = document.getElementById('up-subject').value;
+  const subj = subjectsCache.find(s=>s.id===subjId);
+  const sel = document.getElementById('up-subsubject');
+  sel.innerHTML = '<option value="">— None —</option>' + (subj?subj.sub_subjects.map(ss=>`<option value="${ss.id}">${escapeHtml(ss.name)}</option>`).join(''):'');
+}
+function updateFileName(input){
+  const label=document.getElementById('file-chosen-label');
+  const zone=document.getElementById('file-dropzone-label');
+  if(input.files && input.files.length){
+    label.textContent = input.files[0].name;
+    label.style.color = 'var(--cyan)';
+    if(zone) zone.classList.add('has-file');
+  } else {
+    label.textContent = 'Click to browse or drop PDF here';
+    label.style.color = '#fff';
+    if(zone) zone.classList.remove('has-file');
+  }
+}
+// iOS / Safari-friendly drag-drop support
+(function initDropzone(){
+  const zone = document.getElementById('file-dropzone-label');
+  const input = document.getElementById('up-file');
+  if(!zone || !input) return;
+  ['dragenter','dragover'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); zone.classList.add('dragover'); }));
+  ['dragleave','drop'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); zone.classList.remove('dragover'); }));
+  zone.addEventListener('drop', e => {
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if(files && files.length){
+      // Assign via DataTransfer for better mobile compatibility
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(files[0]);
+        input.files = dt.files;
+      } catch(err) {
+        // Fallback: some older WebViews don't support DataTransfer assignment
+        console.warn('DataTransfer assign failed', err);
+      }
+      updateFileName(input);
+    }
+  });
+})();
+async function uploadFile(){
+  const subject_id=document.getElementById('up-subject').value;
+  const sub_subject_id=document.getElementById('up-subsubject').value || null;
+  const title=document.getElementById('up-title').value.trim();
+  const input=document.getElementById('up-file'), btn=document.getElementById('upload-commit-btn');
+  if(!title||!input.files.length){ toast('Add a title and choose a PDF.', 'error'); return; }
+  const file=input.files[0];
+  if(file.size > 25*1024*1024){ toast('That file is larger than 25MB.', 'error'); return; }
+  btn.disabled=true; btn.textContent='Uploading...';
+  try{
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const filePath = `${subject_id}/${Date.now()}_${safeName}`;
+    const { error: uploadError } = await supabaseClient.storage.from('worksheets').upload(filePath, file, { contentType:'application/pdf', upsert:false });
+    if(uploadError) throw new Error(uploadError.message);
+    const { data: urlData } = supabaseClient.storage.from('worksheets').getPublicUrl(filePath);
+    const r = await api('/api/worksheets', {action:'insert', title, subject_id, sub_subject_id, file_url:urlData.publicUrl, file_path:filePath});
+    if(!r.success) throw new Error(r.error);
+    closeModals(); navigate(subject_id); toast('Worksheet uploaded.', 'success');
+  }catch(e){ console.error('Worksheet upload failed:', e); toast('Upload failed: '+e.message, 'error'); }
+  finally{ btn.disabled=false; btn.textContent='Upload PDF'; }
+}
+function deleteResource(id){
+  confirmAction('Delete this worksheet?', 'This removes the file and its record permanently.', async ()=>{
+    const r = await api('/api/worksheets', {action:'delete', id});
+    if(r.success){ toast('Deleted.', 'success'); renderResources(); } else { toast(r.error||'Delete failed', 'error'); }
+  });
+}
+
+/* ============================================================
+   Subjects / sub-subjects: add flows
+   ============================================================ */
+function openAddSubject(){
+  if(!me){ openLogin(); return; }
+  const sel = document.getElementById('new-subsubject-parent');
+  sel.innerHTML = subjectsCache.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  document.getElementById('new-subject-name').value=''; document.getElementById('new-subsubject-name').value='';
+  document.getElementById('add-subject-modal').classList.add('active');
+}
+async function submitNewSubject(){
+  const name = document.getElementById('new-subject-name').value.trim();
+  if(!name){ toast('Enter a subject name.', 'error'); return; }
+  const r = await api('/api/subjects', {action:'create_subject', name});
+  if(r.success){ toast('Submitted — another teacher needs to authenticate it before it goes live.', 'success'); closeModals(); }
+  else toast(r.error||'Failed', 'error');
+}
+async function submitNewSubSubject(){
+  const subject_id = document.getElementById('new-subsubject-parent').value;
+  const name = document.getElementById('new-subsubject-name').value.trim();
+  if(!name||!subject_id){ toast('Choose a parent subject and a name.', 'error'); return; }
+  const r = await api('/api/subjects', {action:'create_subsubject', subject_id, name});
+  if(r.success){ toast('Sub-subject added.', 'success'); closeModals(); loadSubjects(); }
+  else toast(r.error||'Failed', 'error');
+}
+
+/* ============================================================
+   Teacher pool page
+   ============================================================ */
+function setPoolTab(tab){
+  poolTab = tab;
+  document.querySelectorAll('#pool-tabs .tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.getElementById('pool-tab-colleagues').style.display = tab==='colleagues' ? 'block':'none';
+  document.getElementById('pool-tab-account').style.display = tab==='account' ? 'block':'none';
+  document.getElementById('pool-tab-admin').style.display = tab==='admin' ? 'block':'none';
+}
+async function loadPoolData(){
+  if(!me) return;
+  document.getElementById('me-name').textContent = me.name;
+  document.getElementById('me-role').textContent = me.role==='head' ? 'Head Teacher' : 'Teacher';
+
+  const all = await getSavedResources();
+  document.getElementById('pool-total-docs').textContent = all.length;
+  document.getElementById('pool-my-docs').textContent = all.filter(w=>w.teacher_id===me.id).length;
+
+  const colleagues = await api('/api/teachers', {action:'list_colleagues'});
+  document.getElementById('colleagues-body').innerHTML = (colleagues.teachers||[]).map(t=>
+    `<tr><td>${escapeHtml(t.name)}</td><td><span class="badge-role ${t.role==='head'?'badge-head':'badge-teacher'}">${t.role}</span></td></tr>`).join('') || '<tr><td colspan="2">No colleagues yet.</td></tr>';
+
+  if(me.role==='head'){
+    const pending = await api('/api/teachers', {action:'list_pending'});
+    document.getElementById('pending-teachers-list').innerHTML = (pending.teachers||[]).length ? (pending.teachers||[]).map(t=>
+      `<div class="resource-item"><div class="resource-left"><div class="resource-title">${escapeHtml(t.name)}</div><div class="resource-sub">${escapeHtml(t.email)}</div></div>
+      <div class="resource-right"><button class="open-btn" onclick="approveTeacher('${t.id}')">Approve</button><button class="delete-btn" onclick="rejectTeacher('${t.id}')">Reject</button></div></div>`
+    ).join('') : '<div class="empty-note">No pending teachers.</div>';
+
+    const pendingSubj = await api('/api/subjects', {action:'list_pending_subjects'});
+    document.getElementById('pending-subjects-list').innerHTML = (pendingSubj.subjects||[]).length ? (pendingSubj.subjects||[]).map(s=>
+      `<div class="resource-item"><div class="resource-left"><div class="resource-title">${escapeHtml(s.name)}</div><div class="resource-sub">Proposed by ${escapeHtml(s.created_by_name)}</div></div>
+      <div class="resource-right"><button class="open-btn" onclick="approveSubject('${s.id}')">Authenticate</button><button class="delete-btn" onclick="deletePendingSubject('${s.id}')">Delete</button></div></div>`
+    ).join('') : '<div class="empty-note">No pending subjects.</div>';
+
+    const approvedSubj = await api('/api/subjects', {action:'list'});
+    document.getElementById('approved-subjects-list').innerHTML = (approvedSubj.subjects||[]).length ? (approvedSubj.subjects||[]).map(s=>
+      `<div class="resource-item"><div class="resource-left"><div class="resource-title">${escapeHtml(s.name)}</div><div class="resource-sub">Authenticated</div></div>
+      <div class="resource-right"><button class="delete-btn" onclick="deauthenticateSubject('${s.id}')">Disauthenticate</button></div></div>`
+    ).join('') : '<div class="empty-note">No authenticated subjects.</div>';
+
+    const allT = await api('/api/teachers', {action:'list_all'});
+    document.getElementById('all-teachers-body').innerHTML = (allT.teachers||[]).map(t=>
+      `<tr><td>${escapeHtml(t.name)}</td><td>${escapeHtml(t.email)}</td><td><span class="badge-role ${t.role==='head'?'badge-head':'badge-teacher'}">${t.role}</span></td><td>${t.upload_count}</td></tr>`).join('');
+  }
+}
+async function approveTeacher(id){ const r=await api('/api/teachers',{action:'approve',id}); if(r.success){toast('Approved.','success'); loadPoolData();} else toast(r.error,'error'); }
+function rejectTeacher(id){ confirmAction('Reject this teacher?','They will need to register again.', async ()=>{ const r=await api('/api/teachers',{action:'reject',id}); if(r.success){toast('Rejected.','success'); loadPoolData();} else toast(r.error,'error'); }); }
+async function approveSubject(id){ const r=await api('/api/subjects',{action:'approve_subject',id}); if(r.success){toast('Subject authenticated.','success'); loadPoolData(); loadSubjects();} else toast(r.error,'error'); }
+async function deletePendingSubject(id){ confirmAction('Delete this pending subject permanently?','This will permanently remove the subject and it cannot be recovered.', async ()=>{ const r=await api('/api/subjects',{action:'delete_pending_subject',id}); if(r.success){toast('Subject deleted permanently.','success'); loadPoolData(); loadSubjects();} else toast(r.error,'error'); }); }
+async function deauthenticateSubject(id){ confirmAction('Disauthenticate this subject?','It will be removed from the public subject list until authenticated again.', async ()=>{ const r=await api('/api/subjects',{action:'deauthenticate_subject',id}); if(r.success){toast('Subject disauthenticated.','success'); loadPoolData(); loadSubjects();} else toast(r.error,'error'); }); }
+
+/* ============================================================
+   Maintenance check
+   ============================================================ */
+async function checkMaintenance(){
+  try{
+    const r = await fetch('/api/status').then(x=>x.json());
+    if(r.maintenance){
+      document.getElementById('maintenance-overlay').innerHTML = `<div class="maintenance-screen"><div class="crash-box">
+        <div class="broken-heart" aria-hidden="true">💔</div>
+        <div class="crash-title">Something broke</div>
+        <div class="crash-message">The site is temporarily unavailable.<br>We're bringing it back as soon as we can.</div>
+        <div class="crash-footer">Please try again in a moment<span class="crash-cursor"></span></div>
+      </div></div>`;
+    } else {
+      document.getElementById('maintenance-overlay').innerHTML = '';
+    }
+  }catch(e){}
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+/* ============================================================
+   Themes / Customize
+   The "default" preset is the original liquid-glass look shipped
+   with the main site — every other preset, custom color/font/bg,
+   and background effect layers on top of it, and everything resets
+   back to this exact default on "Reset all themes".
+   ============================================================ */
+const PRESET_THEMES = [
+  { id:'default',  name:'Midnight Original', sub:'Violet & Cyan liquid glass — the default look', accent:'#8b5cf6', accent2:'#22d3ee' },
+  { id:'glass',    name:'Ice Glass',         sub:'Cool azure & lavender frosted glass',            accent:'#60a5fa', accent2:'#a78bfa' },
+  { id:'paper',    name:'Paper',             sub:'Warm parchment with amber & teal ink',           accent:'#b45309', accent2:'#0f766e' },
+  { id:'operator', name:'Operator',          sub:'Matte black with rose-red highlights',           accent:'#f43f5e', accent2:'#e11d48' },
+  { id:'aurora',   name:'Aurora',            sub:'Deep navy with violet & cyan aurora glow',       accent:'#a855f7', accent2:'#06b6d4' },
+];
+const QUICK_COLORS = [
+  { name:'Violet', hex:'#8b5cf6' }, { name:'Azure', hex:'#38bdf8' }, { name:'Cobalt', hex:'#2563eb' },
+  { name:'Emerald', hex:'#10b981' }, { name:'Rose', hex:'#f43f5e' }, { name:'Amber', hex:'#f59e0b' },
+  { name:'Coral', hex:'#ff6b4a' }, { name:'Silver', hex:'#e2e8f0' },
+];
+const FONT_OPTIONS = [
+  { id:'sf-pro', name:'San Francisco', desc:'Native Apple system font (default)', family:'-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
+  { id:'inter', name:'Inter', desc:'Clean modern geometric sans', family:"'Inter', -apple-system, sans-serif" },
+  { id:'outfit', name:'Outfit', desc:'Smooth rounded display sans', family:"'Outfit', -apple-system, sans-serif" },
+  { id:'jakarta', name:'Plus Jakarta Sans', desc:'Refined contemporary sans', family:"'Plus Jakarta Sans', sans-serif" },
+  { id:'jetbrains', name:'JetBrains Mono', desc:'Developer monospace', family:"'JetBrains Mono', monospace" },
+  { id:'playfair', name:'Playfair Display', desc:'High-contrast editorial serif', family:"'Playfair Display', Georgia, serif" },
+];
+const BG_OPTIONS = [
+  { id:'deep-space', name:'Midnight Space (Default)', hex:'#030408' },
+  { id:'oled-black', name:'Pitch OLED Black', hex:'#000000' },
+  { id:'slate-navy', name:'Slate Navy', hex:'#070c18' },
+  { id:'obsidian-dark', name:'Obsidian Charcoal', hex:'#09090c' },
+];
+const EFFECT_OPTIONS = [
+  { id:'particles', name:'Dots Repulsion (Default)', desc:'Floating glowing dots that repel away from your cursor.' },
+  { id:'waves', name:'Fluid Sine Waves', desc:'Oscillating wave bands that ripple with cursor trajectory.' },
+  { id:'grid', name:'Perspective Grid', desc:'Technical grid matrix with proximity tile illumination.' },
+  { id:'aurora', name:'Aurora Glow', desc:'Atmospheric cosmic light that follows your cursor.' },
+];
+const THEMES = PRESET_THEMES.map(t=>t.id);
+let customizeState = { theme:'default', color:'#8b5cf6', font:'sf-pro', bg:'#030408', effect:'particles', interactive:true };
+
+function applyTheme(name){
+  document.body.classList.remove(...THEMES.map(t=>'theme-'+t));
+  if(name && name !== 'default' && THEMES.includes(name)) document.body.classList.add('theme-'+name);
+  if(name !== 'custom'){
+    document.body.style.removeProperty('--accent'); document.body.style.removeProperty('--accent-2');
+    document.body.style.removeProperty('--bg'); document.body.style.removeProperty('--purple'); document.body.style.removeProperty('--cyan');
+  }
+  customizeState.theme = name || 'default';
+  renderCustomizePanel();
+  persistCustomize();
+}
+function setTheme(name){ applyTheme(name); }
+function setCustomColor(hex){
+  customizeState.color = hex; customizeState.theme = 'custom';
+  document.body.classList.remove(...THEMES.map(t=>'theme-'+t));
+  document.body.style.setProperty('--accent', hex);
+  document.body.style.setProperty('--purple', hex);
+  renderCustomizePanel(); persistCustomize();
+}
+function setFont(id){
+  const f = FONT_OPTIONS.find(x=>x.id===id); if(!f) return;
+  customizeState.font = id;
+  document.documentElement.style.setProperty('--font', f.family);
+  renderCustomizePanel(); persistCustomize();
+}
+function setCustomBg(hex){
+  customizeState.bg = hex; customizeState.theme = 'custom';
+  document.body.classList.remove(...THEMES.map(t=>'theme-'+t));
+  document.body.style.setProperty('--bg', hex);
+  renderCustomizePanel(); persistCustomize();
+}
+function selectEffect(id){
+  customizeState.effect = id;
+  renderCustomizePanel(); persistCustomize();
+}
+function toggleInteractiveBg(){
+  customizeState.interactive = !customizeState.interactive;
+  renderCustomizePanel(); persistCustomize();
+}
+function setCustomizeTab(tab){
+  document.querySelectorAll('.cm-tab').forEach(b=>b.classList.toggle('active', b.dataset.ct===tab));
+  ['presets','custom','effects'].forEach(t=>{ document.getElementById('cm-pane-'+t).style.display = (t===tab?'block':'none'); });
+}
+function persistCustomize(){
+  try{ localStorage.setItem('pyq_customize', JSON.stringify(customizeState)); }catch(e){}
+}
+function renderCustomizePanel(){
+  const presetList = document.getElementById('theme-picker');
+  if(presetList) presetList.innerHTML = PRESET_THEMES.map(t=>`
+    <div class="cm-preset-card ${customizeState.theme===t.id?'active':''}" onclick="setTheme('${t.id}')">
+      <div style="display:flex;align-items:center;gap:.7rem;min-width:0">
+        <div class="cm-preset-orb" style="background:linear-gradient(135deg,${t.accent2},${t.accent})"><i></i></div>
+        <div style="min-width:0"><span class="cm-preset-name">${t.name}</span><span class="cm-preset-sub">${t.sub}</span></div>
+      </div>
+    </div>`).join('');
+
+  const colorLabel = document.getElementById('custom-color-label');
+  if(colorLabel) colorLabel.textContent = customizeState.color.toUpperCase();
+  const quick = document.getElementById('quick-colors');
+  if(quick) quick.innerHTML = QUICK_COLORS.map(c=>`
+      <button class="cm-color-swatch ${customizeState.color.toLowerCase()===c.hex.toLowerCase()?'active':''}" style="background:${c.hex}" title="${c.name}" onclick="setCustomColor('${c.hex}')"></button>`
+    ).join('') + `<label class="cm-color-picker-btn"><input type="color" value="${customizeState.color}" oninput="setCustomColor(this.value)"><span style="width:12px;height:12px;border-radius:50%;background:${customizeState.color};display:inline-block"></span>Custom</label>`;
+
+  const fontGrid = document.getElementById('font-grid');
+  if(fontGrid) fontGrid.innerHTML = FONT_OPTIONS.map(f=>`
+    <div class="cm-font-card ${customizeState.font===f.id?'active':''}" onclick="setFont('${f.id}')">
+      <span class="cm-font-name" style="font-family:${f.family}">${f.name}</span>
+      <span class="cm-font-desc">${f.desc}</span>
+    </div>`).join('');
+
+  const bgGrid = document.getElementById('bg-grid');
+  if(bgGrid) bgGrid.innerHTML = BG_OPTIONS.map(b=>`
+    <div class="cm-bg-card ${customizeState.bg.toLowerCase()===b.hex.toLowerCase()?'active':''}" onclick="setCustomBg('${b.hex}')">
+      <div class="cm-bg-swatch" style="background:${b.hex}"></div>
+      <span class="cm-font-name" style="font-size:.66rem">${b.name}</span>
+    </div>`).join('');
+
+  const effectGrid = document.getElementById('effect-grid');
+  if(effectGrid) effectGrid.innerHTML = EFFECT_OPTIONS.map(e=>`
+    <div class="cm-effect-card ${customizeState.effect===e.id?'active':''}" onclick="selectEffect('${e.id}')">
+      <span class="cm-effect-title">${e.name}</span>
+      <span class="cm-effect-desc">${e.desc}</span>
+    </div>`).join('');
+
+  const toggle = document.getElementById('interactive-toggle');
+  if(toggle) toggle.classList.toggle('on', customizeState.interactive);
+}
+function toggleCustomize(){
+  const p = document.getElementById('customize-panel');
+  p.classList.toggle('open');
+}
+let lastThemeReset = null;
+async function checkCustomizeAllowed(){
+  try{
+    const r = await fetch('/api/status').then(x=>x.json());
+    const allowed = r.customize !== false;
+    document.getElementById('customize-btn').style.display = allowed ? 'block' : 'none';
+    document.getElementById('customize-locked').style.display = allowed ? 'none' : 'block';
+    document.getElementById('customize-body').style.display = allowed ? 'block' : 'none';
+    if(!allowed) document.getElementById('customize-panel').classList.remove('open');
+    // Instant theme reset from owner console
+    if(r.theme_reset && r.theme_reset !== lastThemeReset){
+      lastThemeReset = r.theme_reset;
+      try{ localStorage.removeItem('pyq_customize'); localStorage.removeItem('pyq_theme'); }catch(e){}
+      customizeState = { theme:'default', color:'#8b5cf6', font:'sf-pro', bg:'#030408', effect:'particles', interactive:true };
+      document.documentElement.style.removeProperty('--font');
+      applyTheme('default');
+      toast('Theme reset by administrator.', 'success');
+    }
+    // Dynamic logo if set by owner
+    if(r.logo){
+      document.querySelectorAll('.logo-img, .brand img').forEach(img=>{ if(img.src.indexOf(r.logo)===-1) img.src = r.logo; });
+    }
+  }catch(e){ document.getElementById('customize-btn').style.display = 'block'; }
+}
+function loadSavedTheme(){
+  try{
+    const raw = localStorage.getItem('pyq_customize');
+    if(raw){
+      customizeState = Object.assign(customizeState, JSON.parse(raw));
+    } else {
+      const legacy = localStorage.getItem('pyq_theme');
+      if(legacy) customizeState.theme = legacy;
+    }
+  }catch(e){}
+  applyTheme(customizeState.theme);
+  if(customizeState.theme==='custom'){
+    document.body.style.setProperty('--accent', customizeState.color);
+    document.body.style.setProperty('--purple', customizeState.color);
+    document.body.style.setProperty('--bg', customizeState.bg);
+  }
+  setFont(customizeState.font);
+  renderCustomizePanel();
+}
+
+window.addEventListener('DOMContentLoaded', async ()=>{
+  loadSavedTheme();
+  checkMaintenance();
+  setInterval(checkMaintenance, 20000);
+  checkCustomizeAllowed();
+  setInterval(checkCustomizeAllowed, 30000);
+  await refreshSession();
+  await loadSubjects();
+  initGoogleButtons();
+});
+</script>
+</body>
+</html>

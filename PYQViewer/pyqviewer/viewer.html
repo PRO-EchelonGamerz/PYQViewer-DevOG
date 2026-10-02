@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>PYQViewer — Document</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<style>
+:root{
+  --bg:#030408; --text:#f8fafc; --muted:#8994ab; --purple:#8b5cf6; --cyan:#22d3ee;
+  --line:rgba(255,255,255,.1); --line-strong:rgba(255,255,255,.16);
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0;font-family:var(--font)}
+body{min-height:100vh;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+.top{height:60px;display:flex;align-items:center;justify-content:space-between;padding:0 1.2rem;border-bottom:1px solid var(--line-strong);background:rgba(5,7,15,.85);backdrop-filter:blur(20px);position:sticky;top:0;z-index:10}
+.brand{display:flex;align-items:center;gap:.55rem;font-weight:800;font-size:1rem;color:#fff;text-decoration:none}
+.brand img{height:26px;width:auto}
+.actions{display:flex;gap:.5rem}
+.btn{padding:.48rem .9rem;border-radius:999px;border:1px solid var(--line-strong);background:rgba(255,255,255,.06);color:var(--muted);font-size:.78rem;font-weight:700;cursor:pointer;text-decoration:none;transition:.2s var(--ease)}
+.btn:hover{color:#fff;border-color:rgba(139,92,246,.6);background:rgba(139,92,246,.2)}
+.btn.primary{background:linear-gradient(135deg,var(--purple),#6d5dfc);color:#fff;border-color:transparent}
+.viewer{flex:1;display:flex;flex-direction:column;min-height:0}
+iframe,embed,object{flex:1;width:100%;border:0;background:#111}
+.fallback{padding:3rem 1.5rem;text-align:center;color:var(--muted)}
+.fallback a{color:var(--cyan)}
+.credits{text-align:center;padding:1rem;font-size:.78rem;color:var(--muted);border-top:1px solid var(--line)}
+.credits b{color:#fff}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="index.html"><img src="logo.png" alt="PYQViewer">PYQViewer</a>
+  <div class="actions">
+    <a class="btn" id="back-btn" href="index.html">← Back</a>
+    <a class="btn primary" id="download-btn" download>Download PDF</a>
+  </div>
+</header>
+<div class="viewer" id="viewer">
+  <div class="fallback" id="fallback">Loading document…</div>
+</div>
+<footer class="credits">Made by <b>Arsh Verma</b> and <b>Sachet Anantwar</b>, with the help of <b>Bina Bhutani</b>.</footer>
+<script>
+(function(){
+  const params = new URLSearchParams(location.search);
+  const url = params.get('url') || '';
+  const title = params.get('title') || 'Document';
+  document.title = title + ' — PYQViewer';
+  const downloadBtn = document.getElementById('download-btn');
+  const viewer = document.getElementById('viewer');
+  const fallback = document.getElementById('fallback');
+  if(!url){
+    fallback.innerHTML = 'No document specified. <a href="index.html">Return home</a>.';
+    downloadBtn.style.display = 'none';
+    return;
+  }
+  downloadBtn.href = url;
+  downloadBtn.setAttribute('download', title.replace(/[^\w\-]+/g,'_') + '.pdf');
+  // Prefer native PDF embedding for minimal, clean view
+  const iframe = document.createElement('iframe');
+  iframe.src = url + '#toolbar=1&navpanes=0';
+  iframe.title = title;
+  iframe.setAttribute('allowfullscreen','');
+  iframe.onload = ()=>{ fallback.style.display='none'; };
+  iframe.onerror = ()=>{
+    fallback.innerHTML = 'Unable to preview this PDF in the browser. <a href="'+url+'" target="_blank" rel="noopener">Open or download it</a>.';
+  };
+  viewer.insertBefore(iframe, fallback);
+  // Safety: if iframe stays blank on some browsers, show link after 2.5s
+  setTimeout(()=>{
+    if(fallback.style.display !== 'none'){
+      fallback.innerHTML = 'Preview may be blocked. <a href="'+url+'" target="_blank" rel="noopener">Open PDF</a> or use Download.';
+    }
+  }, 2500);
+})();
+</script>
+</body>
+</html>

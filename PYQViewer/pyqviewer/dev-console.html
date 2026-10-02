@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>PYQViewer — Owner Console</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{
+  --bg:#020203; --panel:rgba(13,15,22,.6); --line:rgba(255,255,255,.09); --line-strong:rgba(255,255,255,.16);
+  --text:#f4f5f8; --muted:#7d869c; --purple:#8b5cf6; --cyan:#22d3ee; --red:#fb7185; --green:#34d399;
+  --blur:blur(34px) saturate(160%); --ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0;font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
+html{scroll-behavior:smooth}
+body{min-height:100vh;background:var(--bg);color:var(--text);overflow-x:hidden}
+button,input,select{font-family:inherit}
+
+/* Same "always alive" background language as the main site, kept extra minimal/dark for the console */
+.bg-grid{position:fixed;inset:-2px;z-index:-4;pointer-events:none;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:40px 40px;mask-image:radial-gradient(ellipse 90% 60% at 50% 0%,#000 30%,transparent 80%);animation:gridDrift 30s linear infinite}
+@keyframes gridDrift{0%{background-position:0 0,0 0}100%{background-position:40px 80px,80px 40px}}
+.orb{position:fixed;border-radius:50%;filter:blur(110px);z-index:-3;pointer-events:none}
+.orb1{width:600px;height:600px;top:-220px;left:-220px;background:radial-gradient(circle,rgba(139,92,246,.18),transparent 70%);animation:float1 24s ease-in-out infinite}
+.orb2{width:560px;height:560px;bottom:-220px;right:-220px;background:radial-gradient(circle,rgba(34,211,238,.14),transparent 70%);animation:float2 28s ease-in-out infinite}
+@keyframes float1{0%,100%{transform:translate(0,0)}50%{transform:translate(60px,50px)}}
+@keyframes float2{0%,100%{transform:translate(0,0)}50%{transform:translate(-50px,-40px)}}
+@media(prefers-reduced-motion:reduce){.bg-grid,.orb1,.orb2{animation:none}}
+
+.glass{background:var(--panel);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line-strong);border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.wrap{width:min(1180px,100%);margin:0 auto;padding:1.4rem clamp(1rem,3vw,2rem) 4rem}
+.login-wrap{max-width:400px;margin:6rem auto}
+h1{font-size:1.2rem;font-weight:800;letter-spacing:-.02em}
+h2{font-size:.95rem;font-weight:800;margin-bottom:.7rem}
+.muted{color:var(--muted);font-size:.78rem}
+.field{margin-bottom:.9rem}
+label{display:block;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.4rem}
+input,select{width:100%;padding:.7rem .85rem;border-radius:10px;border:1px solid var(--line-strong);background:rgba(0,0,0,.4);color:#fff;outline:none;font-size:.83rem}
+input:focus,select:focus{border-color:rgba(139,92,246,.6)}
+button{padding:.62rem .95rem;border-radius:10px;border:0;background:linear-gradient(135deg,var(--purple),#6d5dfc);color:#fff;font-weight:700;cursor:pointer;font-size:.76rem;transition:transform .15s var(--ease),opacity .15s}
+button:hover{transform:translateY(-1px)}
+button:disabled{opacity:.45;cursor:not-allowed;transform:none}
+button.block{width:100%}
+button.ghost{background:rgba(255,255,255,.06);border:1px solid var(--line-strong)}
+button.danger{background:linear-gradient(135deg,#ef4444,#f43f5e)}
+button.small{padding:.4rem .65rem;font-size:.68rem;margin:0 .3rem .3rem 0}
+.error{color:#ffadb8;font-size:.8rem;margin-top:.7rem}
+
+.topbar{position:sticky;top:0;z-index:40;display:flex;align-items:center;justify-content:space-between;padding:.9rem clamp(1rem,3vw,2rem);background:rgba(3,4,8,.75);backdrop-filter:var(--blur);border-bottom:1px solid var(--line-strong);flex-wrap:wrap;gap:.6rem}
+.brand{font-weight:900;letter-spacing:-.02em;display:flex;align-items:center;gap:.5rem}
+.brand img{height:24px;width:auto;border-radius:3px}
+.brand .dot{display:none}
+
+.tabs{display:flex;gap:.4rem;overflow-x:auto;padding:1rem 0 .2rem;margin-bottom:1rem}
+.tab{padding:.55rem 1rem;border-radius:999px;border:1px solid var(--line-strong);background:rgba(255,255,255,.03);color:var(--muted);font-size:.76rem;font-weight:700;white-space:nowrap;cursor:pointer}
+.tab.active{color:#fff;background:linear-gradient(135deg,rgba(139,92,246,.4),rgba(34,211,238,.14));border-color:rgba(139,92,246,.6)}
+
+/* Sidebar-style dev console navigation */
+.dc-layout{display:flex;align-items:flex-start;gap:1.2rem;margin-top:1rem}
+.dc-sidebar{width:236px;flex-shrink:0;padding:.7rem;position:sticky;top:82px;display:flex;flex-direction:column;gap:.25rem}
+.dc-content{flex:1;min-width:0}
+.dc-nav-item{display:flex;align-items:center;gap:.6rem;padding:.65rem .7rem;border-radius:12px;color:var(--muted);font-size:.78rem;font-weight:700;cursor:pointer;border:1px solid transparent;transition:.15s var(--ease)}
+.dc-nav-item:hover{background:rgba(255,255,255,.05);color:#fff}
+.dc-nav-item.active{color:#fff;background:linear-gradient(135deg,rgba(139,92,246,.35),rgba(34,211,238,.14));border-color:rgba(139,92,246,.5)}
+.dc-nav-ico{font-size:.95rem;width:1.3rem;text-align:center;flex-shrink:0;opacity:.9}
+.dc-nav-label{flex:1;min-width:0}
+.dc-nav-count{font-size:.65rem;font-weight:800;background:rgba(255,255,255,.1);border-radius:999px;padding:.15rem .45rem;color:var(--muted)}
+.dc-nav-item.active .dc-nav-count{background:rgba(0,0,0,.25);color:#fff}
+@media (max-width:820px){.dc-layout{flex-direction:column}.dc-sidebar{width:100%;position:static;flex-direction:row;flex-wrap:wrap;overflow-x:auto}.dc-nav-label{white-space:nowrap}}
+
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.8rem;margin-bottom:1.2rem}
+.stat{padding:1.1rem 1.2rem}
+.stat .n{font-size:1.7rem;font-weight:900}
+.stat .l{color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;margin-top:.2rem}
+
+.panel{padding:1.3rem;margin-bottom:1.1rem}
+.panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem;gap:.6rem;flex-wrap:wrap}
+
+table{width:100%;border-collapse:collapse;font-size:.76rem}
+td,th{padding:.5rem .5rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{color:var(--muted);text-transform:uppercase;font-size:.62rem;letter-spacing:.06em}
+.table-wrap{overflow-x:auto}
+.pill{display:inline-block;padding:.2rem .55rem;border-radius:7px;font-size:.65rem;font-weight:800;letter-spacing:.02em}
+.pill.on{background:rgba(251,113,133,.18);color:#ffb4c0}
+.pill.off{background:rgba(52,211,153,.15);color:#a7f3d0}
+.pill.pending{background:rgba(251,191,36,.16);color:#ffd889}
+.pill.approved{background:rgba(52,211,153,.15);color:#a7f3d0}
+.pill.head{background:rgba(139,92,246,.22);color:#c9b3ff}
+.pill.new{background:rgba(34,211,238,.16);color:#9fecff}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;color:#c7cbe0}
+
+#map{height:clamp(420px,62vh,680px);min-height:420px;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.14);background:#020307;box-shadow:inset 0 0 0 1px rgba(139,92,246,.08),0 30px 90px rgba(0,0,0,.55);position:relative}
+.map-shell{position:relative}
+.map-shell:after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:20px;box-shadow:inset 0 0 90px rgba(0,0,0,.58),inset 0 0 0 1px rgba(255,255,255,.025);z-index:401}
+.map-badge{position:absolute;z-index:402;top:14px;left:14px;padding:.48rem .7rem;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(3,4,9,.72);backdrop-filter:blur(14px);color:#dfe5f5;font-size:.66rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.map-legend{position:absolute;z-index:402;right:14px;bottom:14px;display:flex;gap:.55rem;align-items:center;padding:.5rem .65rem;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(3,4,9,.72);backdrop-filter:blur(14px);font-size:.65rem;color:#b9c1d4}
+.legend-dot{width:7px;height:7px;border-radius:50%;display:inline-block;box-shadow:0 0 12px currentColor;margin-right:.3rem}
+.marker-pulse{width:18px;height:18px;border-radius:50%;border:1px solid rgba(34,211,238,.9);background:rgba(34,211,238,.18);box-shadow:0 0 0 0 rgba(34,211,238,.45);animation:mapPulse 2s ease-out infinite}
+.marker-pulse.purple{border-color:rgba(139,92,246,.95);background:rgba(139,92,246,.2);box-shadow:0 0 0 0 rgba(139,92,246,.4)}
+@keyframes mapPulse{0%{box-shadow:0 0 0 0 currentColor;transform:scale(.82)}70%{box-shadow:0 0 0 12px transparent;transform:scale(1)}100%{box-shadow:0 0 0 0 transparent;transform:scale(.82)}}
+.leaflet-popup-content-wrapper{background:rgba(7,9,17,.94);color:#eee;border:1px solid rgba(255,255,255,.12);border-radius:14px;box-shadow:0 25px 70px rgba(0,0,0,.65);backdrop-filter:blur(18px)}
+.leaflet-popup-tip{background:#080a12}
+.leaflet-container{background:#020307;font:inherit}
+.leaflet-control-zoom{border:1px solid rgba(255,255,255,.12)!important;border-radius:12px!important;overflow:hidden;box-shadow:0 15px 35px rgba(0,0,0,.45)!important}
+.leaflet-control-zoom a{background:rgba(6,8,14,.82)!important;color:#dfe5f5!important;border-color:rgba(255,255,255,.08)!important}
+
+.toast{position:fixed;top:1rem;right:1rem;background:#12141f;border:1px solid var(--line-strong);padding:.7rem 1rem;border-radius:10px;font-size:.8rem;z-index:999;box-shadow:0 20px 50px rgba(0,0,0,.5)}
+.empty{color:var(--muted);font-size:.8rem;padding:.8rem 0}
+.note{font-size:.74rem;color:var(--muted);line-height:1.6;margin-top:.6rem}
+::-webkit-scrollbar{height:8px;width:8px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:8px}
+</style>
+
+<style id="premium-dev-matte">
+/* Dark matte finish; existing Dev Page animations remain intact */
+body{
+  background-color:#05070b !important;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:9997;
+  background:
+    radial-gradient(circle at 18% 15%, rgba(80,110,255,.055), transparent 34%),
+    radial-gradient(circle at 86% 20%, rgba(140,70,255,.045), transparent 30%),
+    linear-gradient(rgba(3,5,9,.08), rgba(3,5,9,.16));
+}
+</style>
+
+
+<style id="teacher-profile-ui">
+.profile-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.62);backdrop-filter:blur(8px);z-index:700;opacity:0;pointer-events:none;transition:opacity .22s ease}
+.profile-backdrop.open{opacity:1;pointer-events:auto}
+.profile-drawer{position:fixed;top:0;right:0;height:100vh;width:min(470px,94vw);background:rgba(7,9,16,.94);border-left:1px solid rgba(255,255,255,.12);box-shadow:-30px 0 90px rgba(0,0,0,.7);backdrop-filter:blur(28px) saturate(150%);z-index:701;transform:translateX(102%);transition:transform .32s var(--ease);overflow:auto}
+.profile-backdrop.open .profile-drawer{transform:translateX(0)}
+.profile-head{padding:1.5rem;border-bottom:1px solid var(--line);display:flex;gap:1rem;align-items:center}
+.profile-avatar{width:68px;height:68px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.16);box-shadow:0 0 35px rgba(139,92,246,.22);background:linear-gradient(135deg,#8b5cf6,#22d3ee)}
+.profile-avatar-fallback{display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.35rem;font-weight:900}
+.profile-close{margin-left:auto;width:34px;height:34px;padding:0;border-radius:50%;background:rgba(255,255,255,.06);border:1px solid var(--line-strong)}
+.profile-body{padding:1.2rem 1.5rem 2rem}
+.profile-name{font-size:1.12rem;font-weight:900}
+.profile-email{font-size:.76rem;color:var(--muted);margin-top:.2rem;word-break:break-word}
+.profile-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:.55rem;margin:1rem 0}
+.profile-kpi{padding:.8rem;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.025)}
+.profile-kpi b{display:block;font-size:1.15rem}.profile-kpi span{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.profile-location{padding:.85rem;border:1px solid rgba(34,211,238,.14);border-radius:13px;background:linear-gradient(135deg,rgba(34,211,238,.06),rgba(139,92,246,.05));margin-bottom:1rem}
+.profile-event{padding:.72rem 0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:88px 1fr;gap:.65rem}
+.profile-event:last-child{border-bottom:0}.profile-event time{font-size:.67rem;color:var(--muted)}.profile-event-main{font-size:.75rem}.profile-event-sub{font-size:.66rem;color:var(--muted);margin-top:.2rem;line-height:1.5}
+.teacher-person{display:flex;align-items:center;gap:.55rem}.teacher-mini-avatar{width:30px;height:30px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,.14);background:linear-gradient(135deg,#8b5cf6,#22d3ee);flex:none}
+.teacher-name-button{background:none;border:0;padding:0;color:#fff;font-weight:800;text-align:left;cursor:pointer}
+.teacher-name-button:hover{color:#cbb9ff;transform:none}
+</style>
+
+</head>
+<body>
+<div class="bg-grid"></div><div class="orb orb1"></div><div class="orb orb2"></div>
+<div id="toasts"></div>
+
+<div id="profile-backdrop" class="profile-backdrop" onclick="if(event.target===this)closeTeacherProfile()">
+  <aside class="profile-drawer" aria-label="Teacher profile">
+    <div id="profile-content"></div>
+  </aside>
+</div>
+
+
+<div id="login-view">
+  <div class="wrap">
+    <div class="glass login-wrap" style="padding:1.8rem">
+      <h1 style="margin-bottom:1.2rem">Owner Console</h1>
+      <div class="field"><label>Username</label><input id="u" autocomplete="off"></div>
+      <div class="field"><label>Password</label><input id="p" type="password"></div>
+      <button class="block" onclick="login()">Sign in</button>
+      <div class="error" id="login-err" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<div id="main-view" style="display:none">
+  <div class="topbar">
+    <div class="brand"><img src="logo.png" alt=""> Owner Console</div>
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+      <span class="muted">Maintenance:</span> <span class="pill" id="maint-pill">—</span>
+      <button class="ghost small" onclick="toggleMaint(true)">Crash it</button>
+      <button class="ghost small" onclick="toggleMaint(false)">Restore</button>
+      <button class="ghost small" onclick="logout()">Sign out</button>
+    </div>
+  </div>
+
+  <div class="wrap dc-layout">
+    <div class="glass dc-sidebar" id="tabs">
+      <div class="dc-nav-item active" data-t="overview" onclick="setTab('overview')">
+        <span class="dc-nav-ico">◆</span><span class="dc-nav-label">Overview</span>
+      </div>
+      <div class="dc-nav-item" data-t="teachers" onclick="setTab('teachers')">
+        <span class="dc-nav-ico">◈</span><span class="dc-nav-label">Teachers</span><span class="dc-nav-count" id="nav-c-teachers">0</span>
+      </div>
+      <div class="dc-nav-item" data-t="subjects" onclick="setTab('subjects')">
+        <span class="dc-nav-ico">▤</span><span class="dc-nav-label">Subjects &amp; Sub-Subjects</span><span class="dc-nav-count" id="nav-c-subjects">0</span>
+      </div>
+      <div class="dc-nav-item" data-t="worksheets" onclick="setTab('worksheets')">
+        <span class="dc-nav-ico">▥</span><span class="dc-nav-label">Worksheets</span><span class="dc-nav-count" id="nav-c-worksheets">0</span>
+      </div>
+      <div class="dc-nav-item" data-t="control" onclick="setTab('control')">
+        <span class="dc-nav-ico">⚙</span><span class="dc-nav-label">Site Control &amp; God Mode</span>
+      </div>
+      <div class="dc-nav-item" data-t="map" onclick="setTab('map')">
+        <span class="dc-nav-ico">📍</span><span class="dc-nav-label">Login Map</span><span class="dc-nav-count" id="nav-c-map">0</span>
+      </div>
+    </div>
+
+    <div class="dc-content">
+    <div id="tab-overview">
+      <div class="stat-grid">
+        <div class="glass stat"><div class="n" id="s-teachers">0</div><div class="l">Teachers</div></div>
+        <div class="glass stat"><div class="n" id="s-pending">0</div><div class="l">Pending approval</div></div>
+        <div class="glass stat"><div class="n" id="s-subjects">0</div><div class="l">Subjects</div></div>
+        <div class="glass stat"><div class="n" id="s-worksheets">0</div><div class="l">Worksheets</div></div>
+        <div class="glass stat"><div class="n" id="s-logins">0</div><div class="l">Logins tracked</div></div>
+      </div>
+      <div class="glass panel">
+        <h2>Latest activity</h2>
+        <div class="table-wrap"><table><thead><tr><th>Teacher</th><th>IP</th><th>Location</th><th>Device</th><th>When</th></tr></thead><tbody id="recent-events-body"></tbody></table></div>
+      </div>
+    </div>
+
+    <div id="tab-teachers" style="display:none">
+      <div class="glass panel">
+        <div class="panel-head"><h2 style="margin:0">Teachers</h2><span class="muted" id="t-count">0</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Teacher</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead><tbody id="t-table"></tbody></table></div>
+      </div>
+    </div>
+
+    <div id="tab-subjects" style="display:none">
+      <div class="glass panel">
+        <div class="panel-head"><h2 style="margin:0">Subjects</h2><span class="muted" id="s-count-lbl">0</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Name</th><th>Created by</th><th>Status</th><th>Actions</th></tr></thead><tbody id="s-table"></tbody></table></div>
+      </div>
+    </div>
+
+    <div id="tab-worksheets" style="display:none">
+      <div class="glass panel">
+        <div class="panel-head">
+          <h2 style="margin:0">Worksheets</h2>
+          <input id="w-filter" placeholder="Filter by title or teacher…" style="max-width:260px" oninput="renderWorksheets()">
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Title</th><th>Teacher</th><th>Uploaded</th><th>Actions</th></tr></thead><tbody id="w-table"></tbody></table></div>
+      </div>
+    </div>
+
+    <div id="tab-map" style="display:none">
+      <div class="glass panel">
+        <div class="panel-head" style="display:flex;gap:1rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
+              <div><h2 style="margin:0">Login locations</h2><span class="muted">Device GPS when permission is granted; IP fallback when it is not.</span></div>
+              <button class="small ghost" onclick="restoreMapLocations()">Restore hidden locations</button>
+            </div>
+        <div class="map-shell">
+          <div class="map-badge">Live sign-in intelligence</div>
+          <div id="map"></div>
+          <div class="map-legend"><span><i class="legend-dot" style="color:#22d3ee;background:#22d3ee"></i>New device</span><span><i class="legend-dot" style="color:#8b5cf6;background:#8b5cf6"></i>Known</span></div>
+        </div>
+        <div class="note">Pins use the device's browser location when the teacher grants permission at sign-in. The stored city/region/country are reverse-geocoded from those GPS coordinates. If permission is denied or unavailable, the system falls back to approximate IP-based location. Hiding a pin only removes it from this map; the login event, IP, ID, timestamp and other audit information remain stored.</div>
+      </div>
+      <div class="glass panel">
+        <h2>All login events</h2>
+        <div class="table-wrap"><table><thead><tr><th>Teacher</th><th>IP</th><th>City</th><th>Region</th><th>Country</th><th>Lat, Lon</th><th>Device</th><th>When</th><th></th></tr></thead><tbody id="e-table"></tbody></table></div>
+      </div>
+    </div>
+
+    <div id="tab-control" style="display:none">
+      <div class="glass panel">
+        <h2>Site Control &amp; God Mode — Maintenance / crash screen</h2>
+        <p class="muted" style="margin-bottom:.8rem">Turning this on shows a minimal crashed page with a red broken heart instead of the real site. State is verified by reading it back from the database.</p>
+        <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+          <span>Current state:</span> <span class="pill" id="maint-pill-2">—</span>
+          <button class="danger small" onclick="toggleMaint(true)">Turn ON (crash site)</button>
+          <button class="ghost small" onclick="toggleMaint(false)">Turn OFF (restore)</button>
+        </div>
+      </div>
+      <div class="glass panel">
+        <h2>Themes &amp; Customize</h2>
+        <p class="muted" style="margin-bottom:.8rem">Control whether users can change themes, and force-reset everyone's theme to default instantly (no reload required on their side — they pick it up on the next status poll).</p>
+        <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:.8rem">
+          <button class="small" onclick="setCustomize(true)">Enable Customize</button>
+          <button class="small ghost" onclick="setCustomize(false)">Disable Customize</button>
+          <button class="small danger" onclick="resetThemes()">Reset all themes now</button>
+        </div>
+        <p class="muted" style="margin-bottom:.5rem">Site logo URL (leave blank for default). Applied on next status poll.</p>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <input id="logo-url" placeholder="https://…/logo.png" style="flex:1;min-width:180px">
+          <button class="small" onclick="setLogo()">Save logo</button>
+        </div>
+      </div>
+      <div class="glass panel">
+        <h2>Danger zone</h2>
+        <p class="muted" style="margin-bottom:.8rem">Deletes every worksheet record and its file from storage. Cannot be undone.</p>
+        <button class="danger" onclick="purge()">Purge all worksheets</button>
+      </div>
+      <div class="glass panel">
+        <h2>What this console can and can't do</h2>
+        <p class="note">This console has full control over everything inside the app: every teacher account (approve, reject, promote, force-logout, delete), every subject and worksheet, and the site's public on/off state. What it deliberately does <b>not</b> do is reach outside the app — it can't redeploy or modify the Vercel project, edit environment variables/secrets, or touch the GitHub repo. Wiring that in would mean a public login form having write-access to your entire hosting account, which is a much bigger risk than anything this app needs to solve. If you ever do want a "restart the deployment" button, that's a separate, deliberate step (a scoped Vercel API token) — say the word and it can be added on top of this.</p>
+      </div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let cache = null, map = null, markersLayer = null, activeTab = 'overview';
+
+async function api(body){ const r = await fetch('/api/owner', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); return r.json(); }
+function toast(msg){ const el=document.createElement('div'); el.className='toast'; el.textContent=msg; document.getElementById('toasts').appendChild(el); setTimeout(()=>el.remove(),3200); }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function login(){
+  const username=document.getElementById('u').value, password=document.getElementById('p').value;
+  const r = await api({action:'login', username, password});
+  if(r.success){ document.getElementById('login-view').style.display='none'; document.getElementById('main-view').style.display='block'; loadAll(); }
+  else { const e=document.getElementById('login-err'); e.textContent=r.error; e.style.display='block'; }
+}
+function logout(){ api({action:'logout'}).then(()=>location.reload()); }
+document.getElementById('p').addEventListener('keydown', e=>{ if(e.key==='Enter') login(); });
+
+function setTab(t){
+  activeTab = t;
+  document.querySelectorAll('.dc-nav-item').forEach(el=>el.classList.toggle('active', el.dataset.t===t));
+  ['overview','teachers','subjects','worksheets','map','control'].forEach(id=>{
+    document.getElementById('tab-'+id).style.display = id===t ? 'block' : 'none';
+  });
+  if(t==='map') setTimeout(initMap, 30);
+}
+
+async function toggleMaint(on){
+  const r = await api({action:'toggle_maintenance', on});
+  if(!r.success){ toast('Failed: '+r.error); return; }
+  paintMaint(r.maintenance);
+  toast(r.maintenance ? 'Site is now showing the crash screen.' : 'Site restored.');
+}
+function paintMaint(on){
+  [document.getElementById('maint-pill'), document.getElementById('maint-pill-2')].forEach(el=>{
+    if(!el) return;
+    el.textContent = on ? 'ON — site down' : 'OFF — live';
+    el.className = 'pill ' + (on?'on':'off');
+  });
+}
+async function purge(){ if(!confirm('Purge ALL worksheets? This cannot be undone.')) return; const r = await api({action:'purge_everything'}); toast(r.success?'Purged.':r.error); loadAll(); }
+
+async function approveTeacher(id){ const r=await api({action:'approve_teacher', id}); toast(r.success?'Approved.':r.error); loadAll(); }
+async function rejectTeacher(id){ if(!confirm('Reject/remove this teacher account?')) return; const r=await api({action:'reject_teacher', id}); toast(r.success?'Removed.':r.error); loadAll(); }
+async function deleteTeacher(id){ if(!confirm('Permanently delete this teacher account?')) return; const r=await api({action:'delete_teacher', id}); toast(r.success?'Deleted.':r.error); closeTeacherProfile(); loadAll(); }
+async function setRole(id, role){ const r=await api({action:'set_teacher_role', id, role}); toast(r.success?'Role updated.':r.error); loadAll(); }
+async function forceLogout(id){ if(!confirm('Force-logout this teacher? Their session stops working immediately.')) return; const r=await api({action:'force_logout_teacher', id}); toast(r.success?'Teacher logged out.':r.error); loadAll(); }
+
+async function approveSubject(id){ const r=await api({action:'approve_subject', id}); toast(r.success?'Approved.':r.error); loadAll(); }
+async function deauthSubject(id){ const r=await api({action:'deauthenticate_subject', id}); toast(r.success?'Set back to pending.':r.error); loadAll(); }
+async function deleteSubject(id){ if(!confirm('Delete this subject and its sub-subjects?')) return; const r=await api({action:'delete_subject', id}); toast(r.success?'Deleted.':r.error); loadAll(); }
+
+async function deleteWorksheet(id){ if(!confirm('Delete this worksheet and its file?')) return; const r=await api({action:'delete_worksheet', id}); toast(r.success?'Deleted.':r.error); loadAll(); }
+
+function renderWorksheets(){
+  if(!cache) return;
+  const q = (document.getElementById('w-filter').value||'').toLowerCase();
+  const rows = cache.worksheets.filter(w => !q || (w.title||'').toLowerCase().includes(q) || (w.teacher_name||'').toLowerCase().includes(q));
+  document.getElementById('w-table').innerHTML = rows.map(w=>`<tr>
+    <td>${esc(w.title)}</td><td>${esc(w.teacher_name)}</td><td>${new Date(w.created_at).toLocaleString()}</td>
+    <td><a href="${w.file_url}" target="_blank" style="color:#a7f3d0">Open</a>
+      <button class="small danger" onclick="deleteWorksheet('${w.id}')">Delete</button></td></tr>`).join('') || '<tr><td colspan="4" class="empty">No worksheets.</td></tr>';
+}
+
+
+
+function teacherById(id){ return (cache?.teachers||[]).find(t=>String(t.id)===String(id)); }
+function eventForTeacher(id){ return (cache?.events||[]).filter(e=>String(e.teacher_id)===String(id)); }
+function avatarMarkup(t, cls='profile-avatar'){
+  return t?.picture_url
+    ? `<img class="${cls}" src="${esc(t.picture_url)}" alt="${esc(t.name||'Teacher')}" referrerpolicy="no-referrer">`
+    : `<div class="${cls} profile-avatar-fallback">${esc((t?.name||'?').slice(0,1).toUpperCase())}</div>`;
+}
+function openTeacherProfile(id){
+  const t = teacherById(id);
+  if(!t){ toast('Teacher profile not found.'); return; }
+  const events = eventForTeacher(id);
+  const latest = events[0];
+  const gpsEvents = events.filter(e=>e.location_source==='browser-gps' && e.latitude!=null && e.longitude!=null);
+  const devices = [...new Set(events.map(e=>e.device).filter(Boolean))];
+  const location = latest
+    ? `${esc(latest.city||'Unknown')}${latest.region?', '+esc(latest.region):''}${latest.country?', '+esc(latest.country):''}`
+    : 'No login location recorded';
+  const accuracy = latest && Number.isFinite(Number(latest.location_accuracy_m))
+    ? ` · ~${Math.round(Number(latest.location_accuracy_m))} m accuracy`
+    : '';
+  const latestSource = latest?.location_source==='browser-gps' ? 'Device GPS' : (latest ? 'Approx. IP location' : '—');
+
+  document.getElementById('profile-content').innerHTML = `
+    <div class="profile-head">
+      ${avatarMarkup(t)}
+      <div style="min-width:0">
+        <div class="profile-name">${esc(t.name)}</div>
+        <div class="profile-email">${esc(t.email)}</div>
+        <div style="margin-top:.45rem"><span class="pill ${t.status==='approved'?'approved':'pending'}">${esc(t.status)}</span> <span class="pill ${t.role==='head'?'head':'approved'}">${esc(t.role)}</span></div>
+      </div>
+      <button class="profile-close" onclick="closeTeacherProfile()" aria-label="Close">×</button>
+    </div>
+    <div class="profile-body">
+      <div class="profile-kpis">
+        <div class="profile-kpi"><b>${events.length}</b><span>Logins</span></div>
+        <div class="profile-kpi"><b>${devices.length}</b><span>Devices</span></div>
+        <div class="profile-kpi"><b>${gpsEvents.length}</b><span>GPS fixes</span></div>
+      </div>
+      <div class="profile-location">
+        <div class="muted" style="text-transform:uppercase;letter-spacing:.07em;font-size:.62rem">Last known location</div>
+        <div style="font-size:1rem;font-weight:900;margin-top:.25rem">${location}</div>
+        <div class="muted" style="margin-top:.25rem">${latestSource}${accuracy}</div>
+        ${latest?.latitude!=null && latest?.longitude!=null ? `<div class="mono" style="margin-top:.45rem">${Number(latest.latitude).toFixed(6)}, ${Number(latest.longitude).toFixed(6)}</div>` : ''}
+      </div>
+      <h2>Recent activity</h2>
+      <div>${events.slice(0,12).map(e=>`
+        <div class="profile-event">
+          <time>${new Date(e.created_at).toLocaleString()}</time>
+          <div class="profile-event-main">
+            <b>${esc(e.city||'Unknown location')}</b>
+            <div class="profile-event-sub">
+              ${esc(e.device||'Unknown device')} · ${esc(e.ip||'Unknown IP')}<br>
+              ${e.location_source==='browser-gps' ? 'Device GPS' : 'Approx. IP location'}
+              ${Number.isFinite(Number(e.location_accuracy_m)) ? ` · ~${Math.round(Number(e.location_accuracy_m))} m` : ''}
+              ${e.is_new_device ? ' · New device' : ''}
+              ${e.location_hidden ? ' · Map pin hidden' : ''}
+            </div>
+          </div>
+        </div>`).join('') || '<div class="empty">No login history available.</div>'}</div>
+    </div>`;
+  document.getElementById('profile-backdrop').classList.add('open');
+}
+function closeTeacherProfile(){ document.getElementById('profile-backdrop').classList.remove('open'); }
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeTeacherProfile(); });
+
+async function hideLoginLocation(id){
+  if(!confirm('Hide this location from the map? The login record, IP, ID and time will remain.')) return;
+  const r = await api({action:'hide_login_location', id});
+  if(!r.success){ toast(r.error || 'Could not hide location.'); return; }
+  toast('Location hidden from map. Login record retained.');
+  await loadAll();
+}
+
+async function restoreMapLocations(){
+  if(!confirm('Restore all hidden login locations to the map?')) return;
+  const r = await api({action:'restore_map_locations'});
+  if(!r.success){ toast(r.error || 'Could not restore locations.'); return; }
+  toast('Hidden locations restored.');
+  await loadAll();
+}
+async function setCustomize(on){
+  const r = await api({action:'set_customize', on});
+  if(r.success) toast(on ? 'Customize enabled for users.' : 'Customize disabled for users.');
+  else toast(r.error||'Failed');
+}
+async function resetThemes(){
+  if(!confirm('Reset every user’s theme to default right now?')) return;
+  const r = await api({action:'reset_themes'});
+  if(r.success) toast('Theme reset signal sent. Users will return to default within ~30s.');
+  else toast(r.error||'Failed');
+}
+async function setLogo(){
+  const url = (document.getElementById('logo-url').value||'').trim();
+  const r = await api({action:'set_logo', url});
+  if(r.success) toast(url ? 'Logo updated.' : 'Logo cleared (using default).');
+  else toast(r.error||'Failed');
+}
+
+function initMap(){
+  if(!cache) return;
+  if(!map){
+    map = L.map('map', {zoomControl:true, attributionControl:false}).setView([20,0], 2);
+    const MAPTILER_API_KEY = '7AQ6H0aZmgKT772C3JNT';
+    const mapUrl = MAPTILER_API_KEY && MAPTILER_API_KEY !== 'YOUR_MAPTILER_API_KEY_HERE'
+      ? `https://api.maptiler.com/maps/dataviz-dark/{z}/{x}/{y}.png?key=${MAPTILER_API_KEY}`
+      : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+    L.tileLayer(mapUrl, {maxZoom:20, tileSize:512, zoomOffset:-1, attribution: MAPTILER_API_KEY && MAPTILER_API_KEY !== 'YOUR_MAPTILER_API_KEY_HERE' ? '&copy; MapTiler &copy; OpenStreetMap contributors' : '&copy; OpenStreetMap &copy; CARTO'}).addTo(map);
+    markersLayer = L.layerGroup().addTo(map);
+  }
+  markersLayer.clearLayers();
+  const pts = (cache.events||[]).filter(e=>e.latitude && e.longitude && !e.location_hidden);
+  pts.forEach(e=>{
+    const marker = L.circleMarker([e.latitude, e.longitude], {
+      radius: e.is_new_device ? 7 : 5,
+      color: e.is_new_device ? '#22d3ee' : '#8b5cf6',
+      fillColor: e.is_new_device ? '#22d3ee' : '#8b5cf6',
+      fillOpacity: .85, weight: 1.5,
+    }).addTo(markersLayer);
+    const locationLabel = e.location_source === 'browser-gps' ? 'Device location' : 'Approx. IP location';
+    const accuracyLabel = Number.isFinite(Number(e.location_accuracy_m)) ? `<br><span class="muted">Accuracy: ~${Math.round(Number(e.location_accuracy_m))} m</span>` : '';
+    marker.bindPopup(`<b>${esc(e.teacher_name||'Unknown')}</b><br>${esc(e.city||'')}${e.region?', '+esc(e.region):''}${e.country?', '+esc(e.country):''}<br>
+      <span class="mono">${esc(e.ip||'')}</span><br>${esc(e.device||'')}<br><span class="muted">${locationLabel}${accuracyLabel}<br>${new Date(e.created_at).toLocaleString()}</span>
+      <br><button class="small danger" style="margin-top:.55rem" onclick="hideLoginLocation('${esc(e.id)}')">Hide location from map</button>`);
+  });
+  if(pts.length){
+    try{ map.fitBounds(pts.map(e=>[e.latitude,e.longitude]), {maxZoom:6, padding:[30,30]}); }catch(e){}
+  }
+}
+
+async function loadAll(){
+  const s = await api({action:'status'}); paintMaint(s.maintenance);
+  const r = await api({action:'overview'});
+  if(!r.success){ toast(r.error||'Failed to load overview'); return; }
+  cache = r;
+
+  document.getElementById('s-teachers').textContent = r.teachers.length;
+  document.getElementById('s-pending').textContent = r.teachers.filter(t=>t.status==='pending').length;
+  document.getElementById('s-subjects').textContent = r.subjects.length;
+  document.getElementById('s-worksheets').textContent = r.worksheets.length;
+  document.getElementById('s-logins').textContent = r.events.length;
+  document.getElementById('nav-c-teachers').textContent = r.teachers.length;
+  document.getElementById('nav-c-subjects').textContent = r.subjects.length;
+  document.getElementById('nav-c-worksheets').textContent = r.worksheets.length;
+  document.getElementById('nav-c-map').textContent = r.events.length;
+
+  document.getElementById('recent-events-body').innerHTML = r.events.slice(0,8).map(e=>`<tr>
+    <td><button class="teacher-name-button" onclick="openTeacherProfile('${esc(e.teacher_id||'')}')">${esc(e.teacher_name)}</button></td><td class="mono">${esc(e.ip)}</td>
+    <td>${esc((e.city||'')+(e.country?', '+e.country:''))}</td><td>${esc(e.device)}</td>
+    <td>${new Date(e.created_at).toLocaleString()}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No login activity yet.</td></tr>';
+
+  document.getElementById('t-count').textContent = r.teachers.length;
+  document.querySelector('#t-table').innerHTML = r.teachers.map(t=>`<tr>
+    <td><div class="teacher-person">
+      ${t.picture_url ? `<img class="teacher-mini-avatar" src="${esc(t.picture_url)}" alt="" referrerpolicy="no-referrer">` : `<span class="teacher-mini-avatar profile-avatar-fallback">${esc((t.name||'?').slice(0,1).toUpperCase())}</span>`}
+      <button class="teacher-name-button" onclick="openTeacherProfile('${esc(t.id)}')">${esc(t.name)}</button>
+    </div></td><td>${esc(t.email)}</td>
+    <td><span class="pill ${t.role==='head'?'head':'approved'}">${t.role}</span></td>
+    <td><span class="pill ${t.status==='approved'?'approved':'pending'}">${t.status}</span></td>
+    <td>
+      ${t.status==='pending' ? `<button class="small" onclick="approveTeacher('${t.id}')">Approve</button><button class="small danger" onclick="rejectTeacher('${t.id}')">Reject</button>` : ''}
+      ${t.status==='approved' ? `<button class="small ghost" onclick="forceLogout('${t.id}')">Force logout</button>` : ''}
+      ${t.status==='approved' && t.role!=='head' ? `<button class="small ghost" onclick="setRole('${t.id}','head')">Make head</button>` : ''}
+      ${t.status==='approved' && t.role==='head' ? `<button class="small ghost" onclick="setRole('${t.id}','teacher')">Demote</button>` : ''}
+      <button class="small danger" onclick="deleteTeacher('${t.id}')">Delete</button>
+    </td></tr>`).join('') || '<tr><td colspan="5" class="empty">No teachers yet.</td></tr>';
+
+  document.getElementById('s-count-lbl').textContent = r.subjects.length;
+  document.querySelector('#s-table').innerHTML = r.subjects.map(s=>`<tr>
+    <td>${esc(s.name)}</td><td>${esc(s.created_by_name)}</td>
+    <td><span class="pill ${s.status==='approved'?'approved':'pending'}">${s.status}</span></td>
+    <td>
+      ${s.status==='pending' ? `<button class="small" onclick="approveSubject('${s.id}')">Approve</button>` : `<button class="small ghost" onclick="deauthSubject('${s.id}')">Deauthenticate</button>`}
+      <button class="small danger" onclick="deleteSubject('${s.id}')">Delete</button>
+    </td></tr>`).join('') || '<tr><td colspan="4" class="empty">No subjects yet.</td></tr>';
+
+  renderWorksheets();
+
+  document.querySelector('#e-table').innerHTML = r.events.map(e=>`<tr>
+    <td>${esc(e.teacher_name)}</td><td class="mono">${esc(e.ip)}</td><td>${esc(e.city)}</td><td>${esc(e.region)}</td><td>${esc(e.country)}</td>
+    <td class="mono">${e.latitude&&e.longitude?e.latitude.toFixed(3)+', '+e.longitude.toFixed(3):'—'}</td>
+    <td>${esc(e.device)}</td><td>${new Date(e.created_at).toLocaleString()}</td>
+    <td>${e.is_new_device?'<span class="pill new">New device</span>':''}</td>
+     <td>${e.location_hidden ? '<span class="pill">Hidden from map</span>' : (e.latitude&&e.longitude ? `<button class="small danger" onclick="hideLoginLocation('${esc(e.id)}')">Hide map pin</button>` : '—')}</td></tr>`).join('') || '<tr><td colspan="10" class="empty">No login activity yet.</td></tr>';
+
+  if(activeTab==='map') initMap();
+}
+</script>
+</body>
+</html>
